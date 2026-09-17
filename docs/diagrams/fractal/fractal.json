@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "id": "frost",
+  "title": "Frost",
+  "description": "A model and execution-profile recommender: task analysis in, one deterministic Recommend policy, human or JSON out.",
+  "provenance": "Authored on 2026-09-16 from the Go sources under cmd/ and internal/ after slice 1 was implemented, plus config/ examples and the README. Elements marked proposed come from docs/plans/active/model-router.md (slices 1a, 2, 3 and the later API/MCP note) and are not built; the router's Capacity placeholder and the examples/capacity jq converter exist but nothing in the executable consumes a snapshot yet. Evidence paths are pointers into this repository, not proof that a claim is still current.",
+  "boundaries": [
+    {
+      "id": "deterministic-core",
+      "title": "Deterministic core",
+      "description": "No environment, filesystem or network reads. Adapters produce the inputs and render the Decision.",
+      "kind": "ownership",
+      "members": [
+        "frost.router"
+      ],
+      "color": "#739886"
+    },
+    {
+      "id": "public-evidence",
+      "title": "Public model evidence",
+      "description": "Neutral, source-attributed facts about models. Frost reads the file; a producer, not the router, knows the public sources.",
+      "kind": "ownership",
+      "members": [
+        "frost.catalog",
+        "files.catalog",
+        "catalog-build"
+      ],
+      "color": "#B59669"
+    },
+    {
+      "id": "operator-config",
+      "title": "Operator-owned configuration",
+      "description": "What the operator can actually run and how to choose: profiles, labeled priors, latency classes, policy, pools, and the question set the analyzer is asked.",
+      "kind": "ownership",
+      "members": [
+        "frost.config",
+        "files.config",
+        "files.questions"
+      ],
+      "color": "#B5A469"
+    },
+    {
+      "id": "transient-capacity",
+      "title": "Transient capacity (proposed)",
+      "description": "Ephemeral usage observations, produced outside Frost and read as a neutral snapshot. A snapshot cannot redefine profile-to-pool topology.",
+      "kind": "ownership",
+      "members": [
+        "frost.capacity",
+        "files.capacity",
+        "codexbar-producer"
+      ],
+      "color": "#C4A26A"
+    },
+    {
+      "id": "network-seam",
+      "title": "The only network seam",
+      "description": "Task text leaves the machine here and nowhere else. The adapter owns transport, retries and validation.",
+      "kind": "network",
+      "members": [
+        "frost.analyzer.typesafe",
+        "typesafe-api"
+      ],
+      "color": "#9A91C4"
+    },
+    {
+      "id": "local-records",
+      "title": "Explicit local records",
+      "description": "Recording is opt-in with --record because the record stores task text. Replay recomputes the policy from stored answers.",
+      "kind": "ownership",
+      "members": [
+        "frost.evidence",
+        "files.records"
+      ],
+      "color": "#82A6B6"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "overview",
+      "title": "The big picture",
+      "description": "One binary, one pure selection core, and the files and service around it.",
+      "expanded": [
+        "frost"
+      ],
+      "proposed": false,
+      "lens": "structure"
+    },
+    {
+      "id": "route",
+      "title": "One route, start to finish",
+      "description": "A task enters through the CLI, is judged by the analyzer, decided by Recommend, and rendered; --record keeps the answers and --replay recomputes without the provider.",
+      "expanded": [
+        "frost",
+        "frost.cli",
+        "frost.analyzer",
+        "frost.router",
+        "frost.evidence"
+      ],
+      "proposed": false,
+      "lens": "structure"
+    },
+    {
+      "id": "recommend",
+      "title": "Inside Recommend",
+      "description": "How a validated assessment becomes a Decision inside the pure core: read the distributions, apply hard constraints, decide adequacy from measurements or labeled priors, then order by the chosen objective and add alternatives. The CLI calls in and receives the Decision; config and catalog supply the contract types.",
+      "expanded": [
+        "frost",
+        "frost.router",
+        "frost.router.recommend"
+      ],
+      "proposed": false,
+      "lens": "structure"
+    },
+    {
+      "id": "inputs",
+      "title": "Who owns each input",
+      "description": "Public model evidence, operator-owned configuration and the proposed transient capacity snapshot are separate inputs with separate owners; the router only sees their normalized types.",
+      "expanded": [
+        "frost",
+        "files"
+      ],
+      "proposed": true,
+      "lens": "trust",
+      "layout": "elk-layered-down"
+    },
+    {
+      "id": "roadmap",
+      "title": "What the plan adds next",
+      "description": "Planned, not built: a catalog producer (slice 1a), capacity-aware choice with an external CodexBar producer (slice 2), reproducible evaluation (slice 3), and later API and MCP adapters over the same Recommend boundary.",
+      "expanded": [
+        "frost"
+      ],
+      "proposed": true,
+      "lens": "structure",
+      "layout": "elk-layered-down"
+    }
+  ]
+}

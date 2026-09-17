@@ -1,0 +1,68 @@
+{
+ "data": [
+  {
+   "artificial_analysis_intelligence_index_cost": null,
+   "evaluations": {
+    "artificial_analysis_agentic_index": 45.0,
+    "artificial_analysis_coding_index": 75.0,
+    "artificial_analysis_intelligence_index": 55.0
+   },
+   "id": "00000000-0000-4000-8000-f103bee88bdf",
+   "model_creator": {
+    "id": "c",
+    "name": "Synthetic"
+   },
+   "name": "Claude Opus 5 (Adaptive Reasoning, High Effort)",
+   "performance": {
+    "median_end_to_end_response_time_seconds": null,
+    "median_output_tokens_per_second": 80.0,
+    "median_time_to_first_answer_token_seconds": 0.9,
+    "median_time_to_first_token_seconds": 0.9
+   },
+   "pricing": {
+    "price_1m_cache_hit_tokens": null,
+    "price_1m_cache_write_tokens": null,
+    "price_1m_input_tokens": 10.0,
+    "price_1m_output_tokens": 50.0
+   },
+   "release_date": "2026-07-09",
+   "slug": "claude-opus-5-high"
+  },
+  {
+   "artificial_analysis_intelligence_index_cost": null,
+   "evaluations": {
+    "artificial_analysis_agentic_index": null,
+    "artificial_analysis_coding_index": null,
+    "artificial_analysis_intelligence_index": 1.0
+   },
+   "id": "00000000-0000-4000-8000-97a89f0b1149",
+   "model_creator": {
+    "id": "c",
+    "name": "Synthetic"
+   },
+   "name": "Synthetic Unmapped Model",
+   "performance": {
+    "median_end_to_end_response_time_seconds": null,
+    "median_output_tokens_per_second": null,
+    "median_time_to_first_answer_token_seconds": null,
+    "median_time_to_first_token_seconds": null
+   },
+   "pricing": {
+    "price_1m_cache_hit_tokens": null,
+    "price_1m_cache_write_tokens": null,
+    "price_1m_input_tokens": null,
+    "price_1m_output_tokens": null
+   },
+   "release_date": "2026-07-09",
+   "slug": "synthetic-unmapped"
+  }
+ ],
+ "intelligence_index_version": 9.9,
+ "pagination": {
+  "has_more": false,
+  "page": 2,
+  "page_size": 3,
+  "total_pages": 2
+ },
+ "tier": "free"
+}

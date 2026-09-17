@@ -1,0 +1,142 @@
+{
+ "leaderboards": [
+  {
+   "name": "Verified",
+   "results": [
+    {
+     "agent": "mini-SWE-agent",
+     "agent_org": "SWE-agent",
+     "checked": null,
+     "cost": 224.71194935,
+     "date": "2026-02-19",
+     "folder": "20260219_mini-v2.0.0_gpt-5-2-codex",
+     "model_display": "GPT 5.2 Codex",
+     "model_org": "OpenAI",
+     "name": "GPT 5.2 Codex",
+     "reasoning_effort": null,
+     "resolved": 72.8,
+     "tags": [
+      "Model: gpt-5-2-codex",
+      "Org: OpenAI",
+      "System: Attempts - 1",
+      "Mini: 2.0.0"
+     ]
+    },
+    {
+     "agent": "mini-SWE-agent",
+     "agent_org": "SWE-agent",
+     "checked": null,
+     "cost": 165.46221805000002,
+     "date": "2026-02-17",
+     "folder": "20260217_mini-v2.0.0_claude-4-5-haiku-high",
+     "model_display": "Claude 4.5 Haiku",
+     "model_org": "Anthropic",
+     "name": "Claude 4.5 Haiku (high)",
+     "reasoning_effort": "high",
+     "resolved": 66.6,
+     "tags": [
+      "Model: claude-haiku-4-5-20251001",
+      "Org: Anthropic",
+      "System: Attempts - 1",
+      "Mini: 2.0.0"
+     ]
+    },
+    {
+     "agent": "live-SWE-agent",
+     "agent_org": "UIUC",
+     "checked": false,
+     "cost": null,
+     "date": "2025-12-15",
+     "folder": "20251215_livesweagent_claude-opus-4-5",
+     "model_display": "Claude 4.5 Opus",
+     "model_org": "Anthropic",
+     "name": "live-SWE-agent + Claude 4.5 Opus medium (20251101)",
+     "reasoning_effort": "medium",
+     "resolved": 79.2,
+     "tags": [
+      "Model: claude-opus-4-5-20251101",
+      "Org: UIUC",
+      "System: Attempts - 1"
+     ]
+    },
+    {
+     "agent": "mini-SWE-agent",
+     "agent_org": "SWE-agent",
+     "checked": true,
+     "cost": 360.6224985,
+     "date": "2025-11-24",
+     "folder": "20251124_mini-v1.16.0_claude-opus-4-5-20251101",
+     "model_display": "Claude 4.5 Opus",
+     "model_org": "Anthropic",
+     "name": "Claude 4.5 Opus (20251101) (medium)",
+     "reasoning_effort": "medium",
+     "resolved": 74.4,
+     "tags": [
+      "Model: claude-opus-4-5-20251101",
+      "Org: Anthropic",
+      "System: Attempts - 1",
+      "Mini: 1.16.0"
+     ]
+    },
+    {
+     "agent": "Salesforce AI Research SAGE",
+     "agent_org": "Salesforce AI Research",
+     "checked": false,
+     "cost": null,
+     "date": "2025-11-03",
+     "folder": "20251103_SalesforceAIResearch_SAGE_OpenHands",
+     "model_display": "Multiple",
+     "model_org": "Anthropic",
+     "name": "Salesforce AI Research SAGE (OpenHands)",
+     "reasoning_effort": null,
+     "resolved": 73.8,
+     "tags": [
+      "Model: claude-sonnet-4.5",
+      "Model: gpt-5",
+      "Org: Salesforce AI Research",
+      "System: Attempts - 2+"
+     ]
+    },
+    {
+     "agent": "mini-SWE-agent",
+     "agent_org": "SWE-agent",
+     "checked": null,
+     "cost": 224.71194935,
+     "date": "2026-02-19",
+     "folder": "20260219_mini-v2.0.0_gpt-5-2-codex",
+     "model_display": "GPT 5.2 Codex",
+     "model_org": "OpenAI",
+     "name": "GPT 5.2 Codex",
+     "reasoning_effort": null,
+     "resolved": 72.8,
+     "tags": [
+      "Model: gpt-5-2-codex",
+      "Org: OpenAI",
+      "System: Attempts - 1",
+      "Mini: 2.0.0"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Lite",
+   "results": [
+    {
+     "agent": "ExpeRepair-v1.0",
+     "date": "2025-06-25",
+     "folder": "20250625_ExpeRepair-v1_claude-4-sonnet-20250514",
+     "model_display": "Claude 4 Sonnet",
+     "name": "ExpeRepair-v1.0 + Claude 4 Sonnet",
+     "reasoning_effort": null,
+     "resolved": 60.33,
+     "tags": [
+      "Model: claude-4-sonnet-20250514",
+      "Model: o3-mini",
+      "Model: o4-mini",
+      "System: Attempts - 2+"
+     ]
+    }
+   ]
+  }
+ ]
+}

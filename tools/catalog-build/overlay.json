@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "models": {
+    "fable": {
+      "label": "Fable",
+      "sources": {
+        "models.dev": ["anthropic/claude-fable-5-1"],
+        "artificialanalysis": ["claude-fable-5-1", "claude-fable-5-1-low", "claude-fable-5-1-medium", "claude-fable-5-1-high", "claude-fable-5-1-xhigh"]
+      },
+      "generation_mechanism": "autoregressive",
+      "notes": "Fable 5.1 is the current Fable; claude-fable-5 is an earlier model and stays unmapped. SWE-bench Verified has no row for it as of 2026-09-16."
+    },
+    "astra": {
+      "label": "Astra",
+      "sources": {
+        "models.dev": ["openai/gpt-6-astra"],
+        "artificialanalysis": ["gpt-6-astra", "gpt-6-astra-low", "gpt-6-astra-medium", "gpt-6-astra-high", "gpt-6-astra-xhigh"]
+      },
+      "generation_mechanism": "autoregressive",
+      "notes": "openai/gpt-6-astra-fast is a different serving mode and stays unmapped until a profile uses it."
+    },
+    "sol": {
+      "label": "Sol",
+      "sources": {
+        "models.dev": ["openai/gpt-5.6-sol"],
+        "artificialanalysis": ["gpt-5-6-sol", "gpt-5-6-sol-low", "gpt-5-6-sol-medium", "gpt-5-6-sol-high", "gpt-5-6-sol-xhigh"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "opus-5": {
+      "label": "Opus 5",
+      "sources": {
+        "models.dev": ["anthropic/claude-opus-5"],
+        "artificialanalysis": ["claude-opus-5", "claude-opus-5-low", "claude-opus-5-medium", "claude-opus-5-high", "claude-opus-5-xhigh"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "grok-4.6": {
+      "label": "Grok 4.6",
+      "sources": {
+        "models.dev": ["xai/grok-4.6"]
+      },
+      "generation_mechanism": "autoregressive",
+      "notes": "No Artificial Analysis slug matched grok-4.6 on 2026-09-16; run propose-aliases after the next refresh."
+    },
+    "muse-1.3-spark-contributor": {
+      "label": "Muse 1.3 Spark contributor",
+      "sources": {
+        "models.dev": ["meta/muse-spark-1.3"],
+        "artificialanalysis": ["muse-spark-1-3-xhigh", "muse-spark-1-3"]
+      },
+      "generation_mechanism": "autoregressive",
+      "notes": "The contributor tier is an access surface, not a different model; the xhigh AA variant is listed first because the operator profile runs at xhigh."
+    },
+    "deepseek-4.1-flash": {
+      "label": "DeepSeek 4.1 Flash",
+      "sources": {
+        "models.dev": ["deepseek/deepseek-v4.1-flash"],
+        "artificialanalysis": ["deepseek-v4-1-flash"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "terra": {
+      "label": "Terra",
+      "sources": {
+        "models.dev": ["openai/gpt-5.6-terra"],
+        "artificialanalysis": ["gpt-5-6-terra", "gpt-5-6-terra-low", "gpt-5-6-terra-medium", "gpt-5-6-terra-high", "gpt-5-6-terra-xhigh"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "sonnet-5": {
+      "label": "Sonnet 5",
+      "sources": {
+        "models.dev": ["anthropic/claude-sonnet-5"],
+        "artificialanalysis": ["claude-sonnet-5", "claude-sonnet-5-low", "claude-sonnet-5-medium", "claude-sonnet-5-high", "claude-sonnet-5-xhigh"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "gemini-3.8": {
+      "label": "Gemini 3.8",
+      "sources": {
+        "models.dev": ["google/gemini-3.8-flash"]
+      },
+      "generation_mechanism": "autoregressive",
+      "notes": "models.dev lists only gemini-3.8-flash for the 3.8 generation; verify this is the model Antigravity runs. No AA slug matched on 2026-09-16."
+    },
+    "luna": {
+      "label": "Luna",
+      "sources": {
+        "models.dev": ["openai/gpt-5.6-luna"],
+        "artificialanalysis": ["gpt-5-6-luna", "gpt-5-6-luna-low", "gpt-5-6-luna-medium", "gpt-5-6-luna-high", "gpt-5-6-luna-xhigh"]
+      },
+      "generation_mechanism": "autoregressive"
+    },
+    "haiku-4.6": {
+      "label": "Haiku 4.6",
+      "sources": {},
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive",
+      "notes": "Unmapped: models.dev, SWE-bench, and Artificial Analysis list Haiku 4.5 only as of 2026-09-16. Facts come from these overlay defaults until a source records 4.6."
+    },
+    "jev-1.13.0": {
+      "label": "Jev 1.13.0",
+      "sources": {},
+      "aliases": ["jev"],
+      "output_contracts": ["typed_decision"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "undisclosed",
+      "notes": "TypeSafe's System One model is not listed by any public source; facts are declared here."
+    }
+  },
+  "ignore": {
+    "swebench": ["System: Attempts - 2+"]
+  }
+}

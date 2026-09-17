@@ -225,7 +225,17 @@ Acceptance cases from the controlling plan, each an offline test:
 - The two SWE-bench rules ship enabled; thresholds remain labeled provisional.
 - Source-derived values must be overridable locally without being clobbered by a refresh (the overrides file above).
 
+## Implementation status
+
+Delivered September 16, 2026 (td-b850c7): `tools/catalog-build` with the models.dev, SWE-bench Verified, and Artificial Analysis connectors, `overlay.json` mapping every example model, operator overrides (`catalog.overrides.json`), atomic publish with `catalog.previous.json`, `latency.suggestions.json`, recorded fixtures under `testdata/2026-09-16/`, a golden end-to-end test, and the two enabled provisional rules in `config/frost.example.toml`. Live findings from the first refresh:
+
+- models.dev maps every operator model except Haiku 4.6 (only Haiku 4.5 is listed) and Jev; both take their facts from overlay defaults. Gemini 3.8 maps to `google/gemini-3.8-flash`, the only 3.8 record, pending confirmation that Antigravity runs that model. DeepSeek 4.1 Flash has no first-party price on models.dev (only resellers list it), so it carries no price measurement.
+- SWE-bench Verified's newest rows date from February 2026 and carry none of the operator's current models, so the two rules fall through to the operator prior for every profile today. models.dev records do carry vendor-reported SWE-Bench Pro, Terminal-Bench, and DeepSWE scores for the current models; importing those is a possible follow-up outside this slice.
+- Artificial Analysis is paginated (four pages of 200 on the free tier) and publishes one record per effort variant; the connector reads the effort from the record name. Grok 4.6 and Gemini 3.8 had no AA slug on this date.
+- AA's median time-to-first-token for reasoning models includes thinking time and grows steeply with effort (Sol: 3.1 s at low, 10 s at high, 103 s at max; Fable 5.1: 4.9 s at low, 282 s at max). Under the plan's thresholds every frontier model classifies as `slow` at its default effort while DeepSeek 4.1 Flash is `medium`. `latency.suggestions.json` therefore carries a `by_effort` map per model alongside the primary class, so the operator picks the class for the effort their profile runs at. The thresholds themselves are untested priors; measured end-to-end latency (slice 3) supersedes them.
+
 ## Changelog
 
 - 2026-09-16: Approved with decisions recorded; implementation started.
+- 2026-09-16: All three threads delivered; first live refresh published to `~/.config/frost/catalog.json` and `catalog.local.json`. Remaining from the sequence: the `config check` latency warning (belongs with `internal/config`) and the Fractal model update.
 - 2026-09-16: Drafted after slice 1 landed; source facts re-verified against live models.dev and SWE-bench payloads on this date.

@@ -1,0 +1,17 @@
+{
+  "source": "artificialanalysis",
+  "files": [
+    {
+      "name": "page-1.json",
+      "url": "https://artificialanalysis.ai/api/v2/language/models/free",
+      "fetched_at": "2026-09-17T03:19:00Z",
+      "sha256": "0d990d746711d2811f9d9e8b8b575dbc29072dc70a802b3e09e3fb5fca219688"
+    },
+    {
+      "name": "page-2.json",
+      "url": "https://artificialanalysis.ai/api/v2/language/models/free?page=2",
+      "fetched_at": "2026-09-17T03:19:00Z",
+      "sha256": "4ac17d7128af43b7ca5fdccad0debe6f2d195fafcb1479aea2350916220dfaaf"
+    }
+  ]
+}

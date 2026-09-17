@@ -1,0 +1,408 @@
+{
+ "anthropic/claude-fable-5": {
+  "attachment": true,
+  "description": "Claude model for creative writing, analysis, and controlled agent workflows",
+  "family": "claude-fable",
+  "id": "anthropic/claude-fable-5",
+  "knowledge": "2026-01-31",
+  "last_updated": "2026-06-09",
+  "limit": {
+   "context": 1000000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Claude Fable 5",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-06-09",
+  "temperature": false,
+  "tool_call": true
+ },
+ "anthropic/claude-fable-5-1": {
+  "attachment": true,
+  "description": "Claude model for demanding reasoning and long-horizon agentic work",
+  "family": "claude-fable",
+  "id": "anthropic/claude-fable-5-1",
+  "knowledge": "2026-06",
+  "last_updated": "2026-09-01",
+  "limit": {
+   "context": 1000000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Claude Fable 5.1",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-09-01",
+  "temperature": false,
+  "tool_call": true
+ },
+ "anthropic/claude-haiku-4-5": {
+  "attachment": true,
+  "description": "Fast Claude lane for lightweight agents, office tasks, and responsive chat",
+  "family": "claude-haiku",
+  "id": "anthropic/claude-haiku-4-5",
+  "knowledge": "2025-02-28",
+  "last_updated": "2025-10-15",
+  "limit": {
+   "context": 200000,
+   "output": 64000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Claude Haiku 4.5 (latest)",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2025-10-15",
+  "temperature": true,
+  "tool_call": true
+ },
+ "anthropic/claude-opus-5": {
+  "attachment": true,
+  "description": "Strongest Claude Opus model for coding, agents, and professional work",
+  "family": "claude-opus",
+  "id": "anthropic/claude-opus-5",
+  "knowledge": "2026-05",
+  "last_updated": "2026-07-24",
+  "limit": {
+   "context": 1000000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Claude Opus 5",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-07-24",
+  "temperature": false,
+  "tool_call": true
+ },
+ "anthropic/claude-sonnet-5": {
+  "attachment": true,
+  "description": "Everyday Claude agent model for coding, planning, browsing, and general work",
+  "family": "claude-sonnet",
+  "id": "anthropic/claude-sonnet-5",
+  "knowledge": "2026-01-31",
+  "last_updated": "2026-06-30",
+  "limit": {
+   "context": 1000000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Claude Sonnet 5",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-06-30",
+  "temperature": false,
+  "tool_call": true
+ },
+ "deepseek/deepseek-v4.1-flash": {
+  "attachment": true,
+  "description": "DeepSeek V4.1 Flash model for reasoning and agentic coding",
+  "family": "deepseek-flash",
+  "id": "deepseek/deepseek-v4.1-flash",
+  "knowledge": "2025-05",
+  "last_updated": "2026-09-10",
+  "license": "MIT",
+  "limit": {
+   "context": 1000000,
+   "output": 384000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "DeepSeek V4.1 Flash",
+  "open_weights": true,
+  "reasoning": true,
+  "release_date": "2026-09-10",
+  "structured_output": true,
+  "temperature": true,
+  "tool_call": true
+ },
+ "google/gemini-3.8-flash": {
+  "attachment": true,
+  "description": "Google's most intelligent Flash model, engineered for long-horizon software engineering, autonomous agents, and complex enterprise workflows",
+  "family": "gemini-flash",
+  "id": "google/gemini-3.8-flash",
+  "last_updated": "2026-09-02",
+  "limit": {
+   "context": 1048576,
+   "output": 65536
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "video",
+    "audio",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Gemini 3.8 Flash",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-09-02",
+  "structured_output": true,
+  "temperature": true,
+  "tool_call": true
+ },
+ "meta/muse-spark-1.3": {
+  "attachment": true,
+  "description": "Muse Spark 1.3 is a multimodal reasoning model from Meta for long-running agentic, multi-agent, and coding workflows. It improves long-horizon agent collaboration, instruction following, and coding efficiency relative to Muse Spark 1.2.",
+  "family": "muse",
+  "id": "meta/muse-spark-1.3",
+  "last_updated": "2026-09-02",
+  "limit": {
+   "context": 1048576,
+   "output": 131072
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "video",
+    "pdf",
+    "audio"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Muse Spark 1.3",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-09-02",
+  "structured_output": true,
+  "temperature": true,
+  "tool_call": true
+ },
+ "openai/gpt-5.6-luna": {
+  "attachment": true,
+  "description": "Cost-efficient GPT-5.6 model for fast, high-volume workloads",
+  "family": "gpt-luna",
+  "id": "openai/gpt-5.6-luna",
+  "knowledge": "2026-02-16",
+  "last_updated": "2026-07-09",
+  "limit": {
+   "context": 1050000,
+   "input": 922000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "GPT-5.6 Luna",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-07-09",
+  "structured_output": true,
+  "temperature": false,
+  "tool_call": true
+ },
+ "openai/gpt-5.6-sol": {
+  "attachment": true,
+  "description": "Frontier GPT-5.6 model for complex professional work, coding, and agentic workflows",
+  "family": "gpt-sol",
+  "id": "openai/gpt-5.6-sol",
+  "knowledge": "2026-02-16",
+  "last_updated": "2026-07-09",
+  "limit": {
+   "context": 1050000,
+   "input": 922000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "GPT-5.6 Sol",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-07-09",
+  "structured_output": true,
+  "temperature": false,
+  "tool_call": true
+ },
+ "openai/gpt-5.6-terra": {
+  "attachment": true,
+  "description": "Balanced GPT-5.6 model for capable, cost-efficient everyday work",
+  "family": "gpt-terra",
+  "id": "openai/gpt-5.6-terra",
+  "knowledge": "2026-02-16",
+  "last_updated": "2026-07-09",
+  "limit": {
+   "context": 1050000,
+   "input": 922000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "GPT-5.6 Terra",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-07-09",
+  "structured_output": true,
+  "temperature": false,
+  "tool_call": true
+ },
+ "openai/gpt-6-astra": {
+  "attachment": true,
+  "description": "GPT-6 Astra is OpenAI's most capable model for complex reasoning, coding, computer use, research, and document creation.",
+  "family": "gpt-astra",
+  "id": "openai/gpt-6-astra",
+  "knowledge": "2026-04-30",
+  "last_updated": "2026-09-04",
+  "limit": {
+   "context": 1050000,
+   "input": 922000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "GPT-6 Astra",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-09-04",
+  "structured_output": true,
+  "temperature": false,
+  "tool_call": true
+ },
+ "openai/gpt-6-astra-fast": {
+  "attachment": true,
+  "description": "Fast variant of GPT-6 Astra for low-latency assistance and high-volume workloads.",
+  "family": "gpt-astra",
+  "id": "openai/gpt-6-astra-fast",
+  "last_updated": "2026-09-04",
+  "limit": {
+   "context": 1050000,
+   "input": 922000,
+   "output": 128000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image",
+    "pdf"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "GPT-6 Astra (Fast)",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-09-04",
+  "structured_output": true,
+  "temperature": false,
+  "tool_call": true
+ },
+ "xai/grok-4.6": {
+  "attachment": true,
+  "description": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",
+  "family": "grok",
+  "id": "xai/grok-4.6",
+  "knowledge": "2026-02-01",
+  "last_updated": "2026-08-12",
+  "limit": {
+   "context": 500000,
+   "output": 500000
+  },
+  "modalities": {
+   "input": [
+    "text",
+    "image"
+   ],
+   "output": [
+    "text"
+   ]
+  },
+  "name": "Grok 4.6",
+  "open_weights": false,
+  "reasoning": true,
+  "release_date": "2026-08-12",
+  "structured_output": true,
+  "temperature": true,
+  "tool_call": true
+ }
+}

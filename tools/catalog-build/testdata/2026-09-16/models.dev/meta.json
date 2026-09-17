@@ -1,0 +1,17 @@
+{
+  "source": "models.dev",
+  "files": [
+    {
+      "name": "models.json",
+      "url": "https://models.dev/models.json",
+      "fetched_at": "2026-09-17T03:19:00Z",
+      "sha256": "8d2510e16fd83014aa084bb9ba37d3e3d7f2092d8640ebefb6a5b30e639fac3a"
+    },
+    {
+      "name": "api.json",
+      "url": "https://models.dev/api.json",
+      "fetched_at": "2026-09-17T03:19:00Z",
+      "sha256": "756c4c3c3b0c5cfd49b598bee1e743106ccdf37b41108b9095d338860ca08f38"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ all: check
 
 build:
 	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN)/frost ./cmd/frost
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN)/catalog-build ./tools/catalog-build
 
 install: build
 	@mkdir -p '$(PREFIX)/bin'

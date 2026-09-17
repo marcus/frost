@@ -1,0 +1,11 @@
+{
+  "source": "swebench",
+  "files": [
+    {
+      "name": "leaderboards.json",
+      "url": "https://raw.githubusercontent.com/SWE-bench/swe-bench.github.io/master/data/leaderboards.json",
+      "fetched_at": "2026-09-17T03:19:00Z",
+      "sha256": "a7482a616c5e271e1c470859ef97753c7f0539ba2b4f1c5ab7b00873b45e9bb1"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+ "data": [
+  {
+   "artificial_analysis_intelligence_index_cost": null,
+   "evaluations": {
+    "artificial_analysis_agentic_index": 40.0,
+    "artificial_analysis_coding_index": 70.0,
+    "artificial_analysis_intelligence_index": 50.0
+   },
+   "id": "00000000-0000-4000-8000-4dcdebd9bfc6",
+   "model_creator": {
+    "id": "c",
+    "name": "Synthetic"
+   },
+   "name": "GPT-5.6 Sol (max)",
+   "performance": {
+    "median_end_to_end_response_time_seconds": null,
+    "median_output_tokens_per_second": 64.5,
+    "median_time_to_first_answer_token_seconds": 3.1,
+    "median_time_to_first_token_seconds": 3.1
+   },
+   "pricing": {
+    "price_1m_cache_hit_tokens": null,
+    "price_1m_cache_write_tokens": null,
+    "price_1m_input_tokens": 4.0,
+    "price_1m_output_tokens": 20.0
+   },
+   "release_date": "2026-07-09",
+   "slug": "gpt-5-6-sol"
+  },
+  {
+   "artificial_analysis_intelligence_index_cost": null,
+   "evaluations": {
+    "artificial_analysis_agentic_index": 38.0,
+    "artificial_analysis_coding_index": 68.0,
+    "artificial_analysis_intelligence_index": 48.0
+   },
+   "id": "00000000-0000-4000-8000-c1ffdac9c71e",
+   "model_creator": {
+    "id": "c",
+    "name": "Synthetic"
+   },
+   "name": "GPT-5.6 Sol (high)",
+   "performance": {
+    "median_end_to_end_response_time_seconds": null,
+    "median_output_tokens_per_second": 70.0,
+    "median_time_to_first_answer_token_seconds": 2.5,
+    "median_time_to_first_token_seconds": 2.5
+   },
+   "pricing": {
+    "price_1m_cache_hit_tokens": null,
+    "price_1m_cache_write_tokens": null,
+    "price_1m_input_tokens": 4.0,
+    "price_1m_output_tokens": 20.0
+   },
+   "release_date": "2026-07-09",
+   "slug": "gpt-5-6-sol-high"
+  },
+  {
+   "artificial_analysis_intelligence_index_cost": null,
+   "evaluations": {
+    "artificial_analysis_agentic_index": 20.0,
+    "artificial_analysis_coding_index": 55.0,
+    "artificial_analysis_intelligence_index": 30.0
+   },
+   "id": "00000000-0000-4000-8000-32ab11c8e699",
+   "model_creator": {
+    "id": "c",
+    "name": "Synthetic"
+   },
+   "name": "DeepSeek V4.1 Flash (Reasoning, Max Effort)",
+   "performance": {
+    "median_end_to_end_response_time_seconds": null,
+    "median_output_tokens_per_second": 220.0,
+    "median_time_to_first_answer_token_seconds": 0.4,
+    "median_time_to_first_token_seconds": 0.4
+   },
+   "pricing": {
+    "price_1m_cache_hit_tokens": null,
+    "price_1m_cache_write_tokens": null,
+    "price_1m_input_tokens": 0.3,
+    "price_1m_output_tokens": 1.2
+   },
+   "release_date": "2026-07-09",
+   "slug": "deepseek-v4-1-flash"
+  }
+ ],
+ "intelligence_index_version": 9.9,
+ "pagination": {
+  "has_more": true,
+  "page": 1,
+  "page_size": 3,
+  "total_pages": 2
+ },
+ "tier": "free"
+}

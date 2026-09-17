@@ -658,7 +658,6 @@ func writeJSON(env Env, v any) int {
 	return ExitOK
 }
 
-
 func readLimited(path string, limit int) ([]byte, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {

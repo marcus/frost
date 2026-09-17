@@ -27,13 +27,13 @@ catalog-build refresh --out ~/.config/frost/catalog.json \
 
 Run those commands from the source checkout, or pass `--overlay /absolute/path/to/tools/catalog-build/overlay.json`. `make install` installs the two executables but leaves source assets in the checkout. Release archives include the overlay, metrics registry, notices, configuration, and capacity example. A future Homebrew package will place them under `$(brew --prefix frost)/share/frost/`; no Homebrew release is published yet.
 
-Local changes that must survive a refresh go in `~/.config/frost/catalog.overrides.json` or the path passed to `--overrides`. Per-model `set`, `add_measurements`, and `remove_measurements` operations are applied last and labeled in the diff. A successful publish validates and atomically replaces the destination, keeps the prior file as `catalog.previous.json`, and writes `latency.suggestions.json` beside the distributable catalog.
+Local changes that must survive a refresh go in `~/.config/frost/catalog.overrides.json` or the path passed to `--overrides`. Per-model `set`, `add_measurements`, and `remove_measurements` operations are applied last and labeled in the diff. A successful publish validates and atomically replaces the destination, keeps the prior file as `catalog.previous.json`, and writes `latency.suggestions.json` beside the restricted catalog when `--restricted-out` is set, or beside the public catalog otherwise.
 
 Source-data terms remain separate from Frost's MIT license. models.dev retains its MIT notice; the SWE-bench website data repository is CC BY-NC 4.0; Artificial Analysis free-tier data is internal-use and attribution-restricted and never belongs in the distributable catalog or committed fixtures. Review `tools/catalog-build/NOTICES.md` before redistributing generated data.
 
 ### Latency suggestions
 
-`latency.suggestions.json` contains coarse classes derived from public medians. It is a configuration-review aid, not a runtime measurement and not evidence that a response-time target will be met. `frost config check` looks for the file next to the resolved `catalog_file`.
+`latency.suggestions.json` is a configuration-review aid, not a runtime measurement or evidence that a response-time target will be met. Without `--restricted-out`, it is labeled `data_usage: public` and contains only `unknown` classes, with no Artificial Analysis values, source metadata, or effort classes. With `--restricted-out`, it is written beside that restricted catalog, labeled `data_usage: restricted_local_only`, and describes its basis as restricted local AA data. Keep that file local; if both catalogs share a directory, do not redistribute the directory as an artifact set. A failed or skipped AA refresh retains the last-good restricted suggestions. `frost config check` looks for the file next to the resolved `catalog_file`.
 
 - A missing suggestions file is optional: the check stays successful and reports that the file was not found.
 - Invalid JSON, schema versions, or classes produce warnings but do not make the configuration invalid.

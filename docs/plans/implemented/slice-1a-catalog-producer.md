@@ -28,7 +28,7 @@ Nothing here changes the router's selection policy. Adding a source changes a co
 | Identity | A hand-maintained overlay file, `tools/catalog-build/overlay.json`, is the only way a source ID becomes a Frost model ID. Fuzzy matches are proposals in the diff output, never applied. |
 | Output | The existing catalog contract (`internal/catalog`, schema_version 1). No schema change is required for the first thread; measurement records use the existing fields. |
 | Publication | Write to a temp file in the destination directory, validate with `catalog.Parse`, then rename. The previous file becomes `catalog.previous.json` until the next successful publish. |
-| Restricted data | AA-derived measurements are written only to a catalog path the operator names with `--restricted-out`, listed in `.gitignore` guidance, and never to a distributable fixture. |
+| Restricted data | AA-derived measurements are written only to a catalog path the operator names with `--restricted-out`; AA-derived latency suggestions are written beside that restricted catalog with `data_usage: restricted_local_only`. Both stay local and never enter a distributable fixture. |
 | Operator overrides | `~/.config/frost/catalog.overrides.json` (flag `--overrides`) is applied as the last normalization step on every publish, so a hand-tweaked field, an added or removed measurement, or a pinned value survives every refresh. The diff labels overridden fields. |
 | No scheduler | Refresh is manual (`catalog-build refresh`). A user-owned cron or launchd job can call it later; this plan installs nothing. |
 
@@ -179,7 +179,7 @@ The thresholds are provisional placeholders chosen so that, on the September 202
 
 The producer does not write latency classes into the catalog. `latency_class` lives on the operator's profile because it depends on harness and account, and the catalog contract has no such field. Instead:
 
-- The producer emits `latency.suggestions.json` next to the catalog: per Frost model ID, the coarse class derived from public medians, the evidence used, and the source date. Derivation, labeled a prior: AA median TTFT under 0.5 s and output speed above 150 tok/s → `extra_fast`; TTFT under 1 s and above 60 tok/s → `fast`; TTFT under 3 s → `medium`; otherwise `slow`. Without AA data the file lists the model with `unknown`.
+- Without `--restricted-out`, the producer emits `latency.suggestions.json` beside the public catalog with `data_usage: public`; every model is `unknown`, with no AA-derived values, source metadata, or effort classes. With `--restricted-out`, it writes the file beside the restricted catalog with `data_usage: restricted_local_only` and a restricted-local AA basis. The restricted suggestions use AA median TTFT and output speed to derive the coarse classes: TTFT under 0.5 s and output speed above 150 tok/s → `extra_fast`; TTFT under 1 s and above 60 tok/s → `fast`; TTFT under 3 s → `medium`; otherwise `slow`. A failed or skipped AA refresh preserves the last-good restricted values, source timestamps, and `generated_at`, and relabels any legacy public-median basis as restricted/local.
 - `frost config check` gains a warning (not in this slice's producer, but in the same delivery) when a profile's `latency_class` is more than one class faster than the suggestion for its model.
 - Measured end-to-end latency for the operator's own profiles is a slice 3 concern and overrides both.
 
@@ -190,6 +190,7 @@ The producer does not write latency classes into the catalog. `latency_class` li
 | models.dev facts and prices | Distributable catalog, fixtures, examples (MIT, notice retained). |
 | SWE-bench leaderboard rows | Distributable catalog and fixtures (folder IDs only). |
 | AA measurements | `--restricted-out` only. Never fixtures, never `config/`, never a release archive. |
+| AA-derived latency suggestions | `latency.suggestions.json` beside `--restricted-out`, labeled `data_usage: restricted_local_only`. Keep local; a shared public/restricted directory is not a distributable artifact set. |
 | Recorded payloads under `testdata/` | models.dev and SWE-bench payloads may be committed once trimmed to the models in the overlay; AA payloads are replaced by a synthetic file with the same shape. |
 
 `frost` reads a single catalog file. An operator using AA points `catalog_file` at the restricted catalog, which the producer builds as the distributable catalog plus AA measurements. Two files, one contract.

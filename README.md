@@ -40,7 +40,7 @@ Each live `route` makes one TypeSafe request. Policy modes are `adequate` (defau
 
 ## Refresh the catalog
 
-`catalog-build` is a separate producer. It imports model identity, capabilities, context limits, and prices from models.dev; SWE-bench Verified measurements where an explicitly reviewed identity mapping exists; and optional Artificial Analysis data into a restricted local catalog when `ARTIFICIAL_ANALYSIS_API_KEY` is set. It prints a reviewable diff and atomically publishes the new catalog while retaining `catalog.previous.json`. A failed or skipped Artificial Analysis refresh retains last-good restricted measurements only in the restricted file and reports a partial exit; public, restricted, and latency output paths must be distinct.
+`catalog-build` is a separate producer. It imports model identity, capabilities, context limits, and prices from models.dev; SWE-bench Verified measurements where an explicitly reviewed identity mapping exists; and optional Artificial Analysis data into a restricted local catalog when `ARTIFICIAL_ANALYSIS_API_KEY` is set. It prints a reviewable diff and atomically publishes the new catalog while retaining `catalog.previous.json`. A failed or skipped Artificial Analysis refresh retains last-good measurements in the restricted catalog and last-good AA-derived suggestions beside it, then reports a partial exit; public, restricted, and latency output paths must be distinct.
 
 ```sh
 # Reproduce the checked-in source fixtures without network access.
@@ -56,7 +56,7 @@ catalog-build refresh --out ~/.config/frost/catalog.json \
   --restricted-out ~/.config/frost/catalog.local.json
 ```
 
-Point `catalog_file` at the published file you intend to use. Source IDs become Frost model IDs only through the reviewed `tools/catalog-build/overlay.json`; unmatched IDs are reported for review and receive no automatic mapping. Run from the source checkout or pass an absolute `--overlay` path, because source installation copies the executables but not repository assets. Release archives retain the required assets; a future Homebrew package will place them under `$(brew --prefix frost)/share/frost/`, but no Homebrew release is published yet. The produced `latency.suggestions.json` contains coarse priors for reviewing profile configuration and carries no runtime latency measurements. See [Portable configuration examples](config/README.md) for source ownership, licensing, overrides, and the current evidence gap.
+Point `catalog_file` at the published file you intend to use. Source IDs become Frost model IDs only through the reviewed `tools/catalog-build/overlay.json`; unmatched IDs are reported for review and receive no automatic mapping. Run from the source checkout or pass an absolute `--overlay` path, because source installation copies the executables but not repository assets. Release archives retain the required assets; a future Homebrew package will place them under `$(brew --prefix frost)/share/frost/`, but no Homebrew release is published yet. A public-only refresh writes an unknown-only `latency.suggestions.json` beside the public catalog, with no Artificial Analysis values, source metadata, or effort classes. With `--restricted-out`, AA-derived suggestions are written beside the restricted catalog, labeled `data_usage: restricted_local_only`, and must stay local. See [Portable configuration examples](config/README.md) for source ownership, licensing, overrides, and the current evidence gap.
 
 ## Use capacity snapshots
 

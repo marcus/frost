@@ -265,7 +265,7 @@ func TestProfilesConfigExplain(t *testing.T) {
 	if code := h.run("profiles", "list", "--config", exampleConfig, "--json"); code != ExitOK || !strings.Contains(h.stdout.String(), `"profiles"`) {
 		t.Fatalf("%d", code)
 	}
-	if code := h.run("config", "check", "--config", exampleConfig); code != ExitOK || !strings.HasSuffix(strings.TrimSpace(h.stdout.String()), "ok") {
+	if code := h.run("config", "check", "--config", exampleConfig); code != ExitOK || !strings.HasSuffix(strings.TrimSpace(h.stdout.String()), "ok") || !strings.Contains(h.stdout.String(), "not found; optional") {
 		t.Fatalf("%d %s", code, h.stdout.String())
 	}
 	if code := h.run("config", "check", "--config", exampleConfig, "--json", "--verify-model"); code != ExitOK {
@@ -273,7 +273,7 @@ func TestProfilesConfigExplain(t *testing.T) {
 	}
 	var out map[string]any
 	json.Unmarshal(h.stdout.Bytes(), &out)
-	if out["ok"] != true || !strings.Contains(out["pinned_model"].(string), "not listed") {
+	if out["ok"] != true || !strings.Contains(out["pinned_model"].(string), "not listed") || !strings.Contains(out["latency_suggestions"].(string), "not found; optional") {
 		t.Fatalf("%v", out)
 	}
 	if code := h.run("config", "check", "--config", "/nonexistent.toml", "--json"); code != ExitUsage {
@@ -291,6 +291,57 @@ func TestProfilesConfigExplain(t *testing.T) {
 	}
 	if code := h.run(); code != ExitUsage {
 		t.Fatalf("no args: %d", code)
+	}
+}
+
+func TestConfigCheckLatencySuggestionWarnings(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"frost.example.toml", "catalog.example.json", "questions-v3.json"} {
+		raw, err := os.ReadFile(filepath.Join("../../config", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configPath := filepath.Join(dir, "frost.example.toml")
+	suggestionsPath := filepath.Join(dir, config.LatencySuggestionsFile)
+	suggestions := `{"schema_version":1,"suggestions":{"luna":{"class":"slow","by_effort":{"low":"fast","high":"slow"}},"deepseek-4.1-flash":{"class":"medium"}}}`
+	if err := os.WriteFile(suggestionsPath, []byte(suggestions), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newHarness()
+	if code := h.run("config", "check", "--config", configPath, "--json"); code != ExitOK {
+		t.Fatalf("exit %d: %s%s", code, h.stdout.String(), h.stderr.String())
+	}
+	var out struct {
+		OK                 bool             `json:"ok"`
+		Problems           []config.Problem `json:"problems"`
+		LatencySuggestions string           `json:"latency_suggestions"`
+	}
+	if err := json.Unmarshal(h.stdout.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.OK || out.LatencySuggestions != suggestionsPath {
+		t.Fatalf("output %+v", out)
+	}
+	joined := ""
+	for _, problem := range out.Problems {
+		joined += problem.Message + "\n"
+	}
+	for _, want := range []string{"profiles[10] (luna)", `effort "high"`, "profiles[6] (deepseek-4.1-flash)"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in\n%s", want, joined)
+		}
+	}
+
+	if err := os.WriteFile(suggestionsPath, []byte(`{"schema_version":7}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := h.run("config", "check", "--config", configPath); code != ExitOK || !strings.Contains(h.stdout.String(), "warning: latency suggestions") || !strings.Contains(h.stdout.String(), "unsupported schema_version 7") {
+		t.Fatalf("malformed suggestions: exit %d\n%s", code, h.stdout.String())
 	}
 }
 

@@ -6,6 +6,7 @@ package config
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,9 +25,10 @@ const SchemaVersion = 1
 
 // Defaults that apply when the file leaves a field unset.
 const (
-	DefaultProvider       = "typesafe"
-	DefaultAPIKeyEnv      = "TYPESAFE_API_KEY"
-	DefaultTimeoutSeconds = 45
+	DefaultProvider        = "typesafe"
+	DefaultAPIKeyEnv       = "TYPESAFE_API_KEY"
+	DefaultTimeoutSeconds  = 45
+	LatencySuggestionsFile = "latency.suggestions.json"
 )
 
 // Config is the resolved operator configuration.
@@ -59,6 +61,20 @@ type Pool = router.Pool
 type Problem struct {
 	Severity string // error | warning
 	Message  string
+}
+
+// LatencySuggestions is the optional producer output written beside a catalog.
+// It remains advisory: the operator's profile configuration is authoritative.
+type LatencySuggestions struct {
+	SchemaVersion int                          `json:"schema_version"`
+	Suggestions   map[string]LatencySuggestion `json:"suggestions"`
+}
+
+// LatencySuggestion is the producer's model-level prior, optionally refined
+// for the effort variants reported by its source.
+type LatencySuggestion struct {
+	Class    string            `json:"class"`
+	ByEffort map[string]string `json:"by_effort,omitempty"`
 }
 
 // Severities.
@@ -274,6 +290,100 @@ func Load(path string) (*Config, error) {
 		})
 	}
 	return cfg, nil
+}
+
+// LoadLatencySuggestions reads the optional producer output next to the
+// resolved catalog. A missing file is expected and returns (nil, path, nil).
+func LoadLatencySuggestions(catalogPath string) (*LatencySuggestions, string, error) {
+	path := filepath.Join(filepath.Dir(catalogPath), LatencySuggestionsFile)
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, path, nil
+	}
+	if err != nil {
+		return nil, path, fmt.Errorf("read: %w", err)
+	}
+	var suggestions LatencySuggestions
+	if err := json.Unmarshal(raw, &suggestions); err != nil {
+		return nil, path, fmt.Errorf("decode JSON: %w", err)
+	}
+	if suggestions.SchemaVersion != 1 {
+		return nil, path, fmt.Errorf("unsupported schema_version %d (want 1)", suggestions.SchemaVersion)
+	}
+	for modelID, suggestion := range suggestions.Suggestions {
+		if !validLatencySuggestionClass(suggestion.Class) {
+			return nil, path, fmt.Errorf("model %q has invalid class %q", modelID, suggestion.Class)
+		}
+		for effort, class := range suggestion.ByEffort {
+			if !validLatencySuggestionClass(class) {
+				return nil, path, fmt.Errorf("model %q effort %q has invalid class %q", modelID, effort, class)
+			}
+		}
+	}
+	return &suggestions, path, nil
+}
+
+// CheckLatencySuggestions reports profiles whose configured latency prior is
+// more than one class faster than the producer's suggestion. Per-effort values
+// take precedence when they apply to the profile.
+func (c *Config) CheckLatencySuggestions(suggestions *LatencySuggestions) []Problem {
+	if suggestions == nil {
+		return nil
+	}
+	var problems []Problem
+	for i, profile := range c.Profiles {
+		suggestion, ok := suggestions.Suggestions[profile.ModelID]
+		if !ok || profile.LatencyClass == "" {
+			continue
+		}
+		where := fmt.Sprintf("profiles[%d]", i)
+		if profile.ID != "" {
+			where += " (" + profile.ID + ")"
+		}
+		warn := func(class, effort string) {
+			if !latencyClassMismatch(profile.LatencyClass, class) {
+				return
+			}
+			context := fmt.Sprintf("model %q", profile.ModelID)
+			if effort != "" {
+				context += fmt.Sprintf(" at effort %q", effort)
+			}
+			problems = append(problems, Problem{Severity: SeverityWarning, Message: fmt.Sprintf("%s: latency_class %q is more than one class faster than producer suggestion %q for %s", where, profile.LatencyClass, class, context)})
+		}
+
+		switch profile.EffortMode {
+		case router.EffortFixed:
+			if class, ok := suggestion.ByEffort[profile.NativeEffort]; ok {
+				warn(class, profile.NativeEffort)
+			} else {
+				warn(suggestion.Class, "")
+			}
+		case router.EffortConfigurable:
+			matched := false
+			for _, effort := range profile.EffortOptions {
+				if class, ok := suggestion.ByEffort[effort]; ok {
+					matched = true
+					warn(class, effort)
+				}
+			}
+			if !matched {
+				warn(suggestion.Class, "")
+			}
+		default:
+			warn(suggestion.Class, "")
+		}
+	}
+	return problems
+}
+
+func validLatencySuggestionClass(class string) bool {
+	return class == "unknown" || slices.Contains(router.LatencyClasses, class)
+}
+
+func latencyClassMismatch(configured, suggested string) bool {
+	configuredIndex := slices.Index(router.LatencyClasses, configured)
+	suggestedIndex := slices.Index(router.LatencyClasses, suggested)
+	return configuredIndex >= 0 && suggestedIndex-configuredIndex > 1
 }
 
 func mergePolicy(f filePolicy) router.Policy {

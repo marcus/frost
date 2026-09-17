@@ -233,6 +233,69 @@ func TestValidationWarningsAndAliasRewrite(t *testing.T) {
 	}
 }
 
+func TestLatencySuggestionsAreOptionalAndValidated(t *testing.T) {
+	dir := t.TempDir()
+	catalogPath := filepath.Join(dir, "catalog.json")
+
+	suggestions, path, err := LoadLatencySuggestions(catalogPath)
+	if err != nil || suggestions != nil || path != filepath.Join(dir, LatencySuggestionsFile) {
+		t.Fatalf("missing optional file: suggestions=%v path=%q err=%v", suggestions, path, err)
+	}
+
+	write(t, path, `{"schema_version":1,"suggestions":{"sol":{"class":"slow","by_effort":{"high":"medium"}}}}`)
+	suggestions, _, err = LoadLatencySuggestions(catalogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := suggestions.Suggestions["sol"].ByEffort["high"]; got != "medium" {
+		t.Fatalf("high effort class = %q", got)
+	}
+
+	write(t, path, `{"schema_version":1,"suggestions":{"sol":{"class":"instant"}}}`)
+	if _, _, err := LoadLatencySuggestions(catalogPath); err == nil || !strings.Contains(err.Error(), `model "sol" has invalid class "instant"`) {
+		t.Fatalf("invalid class error = %v", err)
+	}
+
+	write(t, path, `{"schema_version":2,"suggestions":{}}`)
+	if _, _, err := LoadLatencySuggestions(catalogPath); err == nil || !strings.Contains(err.Error(), "unsupported schema_version 2") {
+		t.Fatalf("schema error = %v", err)
+	}
+}
+
+func TestLatencySuggestionMismatchUsesProfileEffort(t *testing.T) {
+	cfg := &Config{Profiles: []router.Profile{
+		{ID: "fixed", ModelID: "sol", EffortMode: router.EffortFixed, NativeEffort: "high", LatencyClass: "fast"},
+		{ID: "configurable", ModelID: "astra", EffortMode: router.EffortConfigurable, EffortOptions: []string{"low", "high", "xhigh"}, LatencyClass: "extra_fast"},
+		{ID: "no-effort", ModelID: "deepseek", EffortMode: router.EffortNone, LatencyClass: "extra_fast"},
+		{ID: "fixed-fallback", ModelID: "fable", EffortMode: router.EffortFixed, NativeEffort: "xhigh", LatencyClass: "fast"},
+	}}
+	suggestions := &LatencySuggestions{SchemaVersion: 1, Suggestions: map[string]LatencySuggestion{
+		"sol":      {Class: "slow", ByEffort: map[string]string{"high": "medium"}},
+		"astra":    {Class: "slow", ByEffort: map[string]string{"low": "fast", "high": "slow"}},
+		"deepseek": {Class: "medium"},
+		"fable":    {Class: "slow", ByEffort: map[string]string{"low": "fast"}},
+	}}
+
+	problems := cfg.CheckLatencySuggestions(suggestions)
+	if len(problems) != 3 {
+		t.Fatalf("problems = %+v", problems)
+	}
+	joined := problems[0].Message + "\n" + problems[1].Message + "\n" + problems[2].Message
+	for _, want := range []string{
+		`profiles[1] (configurable): latency_class "extra_fast"`,
+		`producer suggestion "slow" for model "astra" at effort "high"`,
+		`profiles[2] (no-effort)`,
+		`profiles[3] (fixed-fallback)`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "profiles[0] (fixed)") {
+		t.Fatalf("fixed profile must use its medium high-effort suggestion instead of model-level slow:\n%s", joined)
+	}
+}
+
 func TestResolveOrder(t *testing.T) {
 	dir := t.TempDir()
 	explicit := filepath.Join(dir, "explicit.toml")

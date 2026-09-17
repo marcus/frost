@@ -594,6 +594,20 @@ func runConfig(env Env, args []string) int {
 	if err != nil && (l == nil || len(problems) == 0) {
 		problems = append(problems, config.Problem{Severity: "error", Message: err.Error()})
 	}
+	latencyStatus := "not checked"
+	if err == nil {
+		suggestions, path, suggestionErr := config.LoadLatencySuggestions(l.cfg.CatalogFile)
+		switch {
+		case suggestionErr != nil:
+			latencyStatus = path + " (invalid)"
+			problems = append(problems, config.Problem{Severity: config.SeverityWarning, Message: fmt.Sprintf("latency suggestions %s: %v", path, suggestionErr)})
+		case suggestions == nil:
+			latencyStatus = path + " (not found; optional)"
+		default:
+			latencyStatus = path
+			problems = append(problems, l.cfg.CheckLatencySuggestions(suggestions)...)
+		}
+	}
 	modelStatus := "not checked"
 	if err == nil && *verify {
 		modelStatus = verifyModel(env, l)
@@ -611,7 +625,7 @@ func runConfig(env Env, args []string) int {
 		}
 	}
 	if *jsonOut {
-		out := map[string]any{"schema_version": router.SchemaVersion, "ok": ok, "problems": problems, "pinned_model": modelStatus}
+		out := map[string]any{"schema_version": router.SchemaVersion, "ok": ok, "problems": problems, "pinned_model": modelStatus, "latency_suggestions": latencyStatus}
 		if l != nil && l.cfg != nil {
 			out["config"] = l.cfg.Path
 			out["catalog"] = l.cfg.CatalogFile
@@ -634,6 +648,7 @@ func runConfig(env Env, args []string) int {
 		outf(env.Stdout, "policy    %s mode, quantile %.2f\n", l.cfg.Policy.Mode, l.cfg.Policy.UncertainReasoningQuantile)
 		cp := l.cfg.Policy.Capacity
 		outf(env.Stdout, "capacity  file %s; enforce %v, estimated %v, horizon %gh, reserve %g%%, max age %gm\n", orDash(l.cfg.CapacityFile), cp.EnforceAvailability, cp.AllowEstimatedMeasurements, cp.ExpiryHorizonHours, cp.ReservePercent, cp.MaxSnapshotAgeMinutes)
+		outf(env.Stdout, "latency   %s\n", latencyStatus)
 		outf(env.Stdout, "model     %s\n", modelStatus)
 	}
 	for _, p := range problems {

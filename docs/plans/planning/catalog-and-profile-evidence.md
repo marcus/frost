@@ -112,7 +112,7 @@ An analysis of a moderate CLI change selects reasoning level 2 after the configu
 | C | 0.64 | 500 ms | Yes | Below floor |
 | D | Unknown | 100 ms | No | Unverified; conditional alternative |
 
-For a two-second preference, `fast` selects B. `quality` without a conflicting speed preference selects A. `balanced` with expiry preference selects A. A required one-second target admits B, while a required 300 ms target returns `no_match`: C fails quality and D lacks it. Capacity cannot rescue C, and missing evidence cannot make D the winner. No personal model ordering participates.
+For a two-second preference, `fast` selects B. `quality` without a conflicting speed preference selects A. `adequate` with expiry preference selects A. A required one-second target admits B, while a required 300 ms target returns `no_match`: C fails quality and D lacks it. Capacity cannot rescue C, and missing evidence cannot make D the winner. No personal model ordering participates.
 
 The fixture's comparison uses raw resolve rate for quality and p95 milliseconds for speed; exact ties proceed to expiry, cost, and stable ID. Production rules must state how they treat uncertainty and indistinguishable measurements rather than implying that tiny benchmark differences are meaningful. A public metric with different effort, split, or version does not satisfy this rule silently.
 

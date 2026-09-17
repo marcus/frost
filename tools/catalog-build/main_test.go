@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -197,6 +198,140 @@ func TestAAWithoutKeyIsSkippedAndNeverWrittenToOut(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRefreshRetainsRestrictedAAWhenSkipped(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "catalog.json")
+	restricted := filepath.Join(dir, "catalog.local.json")
+	env := map[string]string{"HOME": dir}
+	if code, _, stderr := exec(t, env, "refresh", "--from-fixtures", fixtures, "--out", out, "--restricted-out", restricted, "--overlay", "overlay.json"); code != exitOK {
+		t.Fatalf("initial refresh: exit %d: %s", code, stderr)
+	}
+	wantAA := catalogSourceCount(t, restricted, "artificialanalysis:")
+	if wantAA == 0 {
+		t.Fatal("initial restricted catalog has no AA measurements")
+	}
+
+	partialFixtures := filepath.Join(dir, "partial-fixtures")
+	for _, sourceName := range []string{"models.dev", "swebench"} {
+		sourceDir := filepath.Join(partialFixtures, sourceName)
+		if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		entries, err := os.ReadDir(filepath.Join(fixtures, sourceName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			raw, err := os.ReadFile(filepath.Join(fixtures, sourceName, entry.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(sourceDir, entry.Name()), raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	code, stdout, stderr := exec(t, env, "refresh", "--from-fixtures", partialFixtures, "--out", out, "--restricted-out", restricted, "--overlay", "overlay.json", "--json")
+	if code != exitPartial {
+		t.Fatalf("refresh with skipped AA: exit %d, want %d\nstdout: %s\nstderr: %s", code, exitPartial, stdout, stderr)
+	}
+	var report refreshReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.OK || !slices.Contains(report.Diff.Retained, "artificialanalysis") {
+		t.Fatalf("report must identify retained partial data: %+v", report)
+	}
+	foundSkipped := false
+	for _, result := range report.Sources {
+		if result.Name == "artificialanalysis" && result.Status == "skipped" {
+			foundSkipped = true
+		}
+	}
+	if !foundSkipped {
+		t.Fatalf("AA source was not reported skipped: %+v", report.Sources)
+	}
+	if got := catalogSourceCount(t, restricted, "artificialanalysis:"); got != wantAA {
+		t.Fatalf("AA measurements after skipped refresh = %d, want retained %d", got, wantAA)
+	}
+	if got := catalogSourceCount(t, out, "artificialanalysis:"); got != 0 {
+		t.Fatalf("public catalog leaked %d AA measurements", got)
+	}
+}
+
+func TestRefreshRejectsEquivalentOutputPaths(t *testing.T) {
+	dir := t.TempDir()
+	realDir := filepath.Join(dir, "real")
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aliasDir := filepath.Join(dir, "alias")
+	if err := os.Symlink(realDir, aliasDir); err != nil {
+		t.Fatal(err)
+	}
+	hardA := filepath.Join(dir, "hard-a.json")
+	hardB := filepath.Join(dir, "hard-b.json")
+	if err := os.WriteFile(hardA, []byte("last-good"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(hardA, hardB); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name       string
+		out        string
+		restricted string
+	}{
+		{name: "same path", out: filepath.Join(dir, "same.json"), restricted: filepath.Join(dir, "same.json")},
+		{name: "clean alias", out: filepath.Join(dir, "clean.json"), restricted: filepath.Join(dir, ".", "clean.json")},
+		{name: "symlinked parent", out: filepath.Join(realDir, "catalog.json"), restricted: filepath.Join(aliasDir, "catalog.json")},
+		{name: "existing hard links", out: hardA, restricted: hardB},
+		{name: "public is suggestions", out: filepath.Join(dir, "latency.suggestions.json")},
+		{name: "restricted is suggestions", out: filepath.Join(dir, "catalog.json"), restricted: filepath.Join(dir, "latency.suggestions.json")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := exec(t, map[string]string{"HOME": dir}, "refresh", "--out", tc.out, "--restricted-out", tc.restricted, "--overlay", "overlay.json", "--json")
+			if code != exitInput || !strings.Contains(stderr, "output paths must be distinct") {
+				t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+		})
+	}
+	raw, err := os.ReadFile(hardA)
+	if err != nil || string(raw) != "last-good" {
+		t.Fatalf("collision check mutated existing output: %q, %v", raw, err)
+	}
+
+	out := filepath.Join(dir, "distinct", "catalog.json")
+	restricted := filepath.Join(dir, "distinct", "catalog.local.json")
+	suggestions, err := validateOutputPaths(out, restricted)
+	if err != nil || suggestions != filepath.Join(dir, "distinct", "latency.suggestions.json") {
+		t.Fatalf("distinct paths: suggestions=%q err=%v", suggestions, err)
+	}
+}
+
+func catalogSourceCount(t *testing.T, path, sourcePrefix string) int {
+	t.Helper()
+	c, _, err := catalog.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, model := range c.Models {
+		for _, measurement := range model.Measurements {
+			if strings.HasPrefix(measurement.Source, sourcePrefix) {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func TestOverridesFlowThroughRefresh(t *testing.T) {

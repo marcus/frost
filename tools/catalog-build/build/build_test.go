@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -215,6 +216,52 @@ func TestFailedSourceRetainsPreviousData(t *testing.T) {
 	if modelByID(asm2.Catalog, "sol").ContextTokens != 1050000 {
 		t.Fatalf("context limit lost when models.dev failed")
 	}
+}
+
+func TestRestrictedSourceRetainsRestrictedPriorWhenUnavailable(t *testing.T) {
+	overlay := testOverlay(t)
+	first, err := Assemble(results(t, overlay, "models.dev", "swebench", "artificialanalysis"), overlay, Overrides{SchemaVersion: 1}, nil, fixedNow, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicPrior, _ := catalog.Parse(mustJSON(first.Catalog))
+	restrictedPrior, _ := catalog.Parse(mustJSON(*first.Restricted))
+	wantAA := countMeasurements(*first.Restricted, "artificialanalysis:")
+	if wantAA == 0 {
+		t.Fatal("fixture must establish restricted measurements")
+	}
+
+	for _, status := range []string{"skipped", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			current := results(t, overlay, "models.dev", "swebench")
+			current = append(current, SourceResult{Name: "artificialanalysis", Status: status, Error: "HTTP 503"})
+			asm, err := AssembleWithRestrictedPrevious(current, overlay, Overrides{SchemaVersion: 1}, &publicPrior, &restrictedPrior, fixedNow.Add(time.Hour), true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := countMeasurements(*asm.Restricted, "artificialanalysis:"); got != wantAA {
+				t.Fatalf("retained AA measurements = %d, want %d", got, wantAA)
+			}
+			if got := countMeasurements(asm.Catalog, "artificialanalysis:"); got != 0 {
+				t.Fatalf("public catalog leaked %d restricted measurements", got)
+			}
+			if !slices.Contains(asm.Retained, "artificialanalysis") {
+				t.Fatalf("retained sources %v", asm.Retained)
+			}
+		})
+	}
+}
+
+func countMeasurements(c CatalogFile, sourcePrefix string) int {
+	count := 0
+	for _, model := range c.Models {
+		for _, measurement := range model.Measurements {
+			if strings.HasPrefix(measurement.Source, sourcePrefix) {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func TestOverridesApplyLastAndAreLabeled(t *testing.T) {

@@ -153,7 +153,7 @@ func Render(w io.Writer, d Diff) {
 		p("! %s overridden: %s\n", id, strings.Join(d.Overridden[id], ", "))
 	}
 	for _, s := range d.Retained {
-		p("! %s failed; previous data retained\n", s)
+		p("! %s unavailable; previous data retained\n", s)
 	}
 	counts := map[string]int{}
 	for _, u := range d.Unmapped {

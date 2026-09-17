@@ -149,9 +149,17 @@ type CatalogFile struct {
 	Models        []router.Model `json:"models"`
 }
 
-// Assemble merges contributions. previous may be nil. Failed sources keep
-// their previous measurements and, for models.dev, previous model facts.
+// Assemble merges contributions using the public catalog as the only prior.
+// Call AssembleWithRestrictedPrevious when restricted source data can be
+// retained from a separately published catalog.
 func Assemble(results []SourceResult, overlay source.Overlay, overrides Overrides, previous *router.Catalog, now time.Time, restrictedOut bool) (Assembly, error) {
+	return AssembleWithRestrictedPrevious(results, overlay, overrides, previous, nil, now, restrictedOut)
+}
+
+// AssembleWithRestrictedPrevious merges contributions. Failed and skipped
+// sources keep measurements from their matching prior catalog; models.dev also
+// keeps its prior public model facts.
+func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overlay, overrides Overrides, previous, restrictedPrevious *router.Catalog, now time.Time, restrictedOut bool) (Assembly, error) {
 	a := Assembly{Overridden: map[string][]string{}, EffortOptions: map[string][]string{}}
 	facts := map[string]source.ModelFacts{}
 	var measurements []source.Measured
@@ -179,10 +187,14 @@ func Assemble(results []SourceResult, overlay source.Overlay, overrides Override
 			latency = append(latency, r.Contribution.Latency...)
 			a.Unmapped = append(a.Unmapped, r.Contribution.Unmapped...)
 			a.Notes = append(a.Notes, r.Contribution.Notes...)
-		case "failed":
-			if previous != nil {
+		case "failed", "skipped":
+			prior := previous
+			if src != nil && src.Restricted() {
+				prior = restrictedPrevious
+			}
+			if prior != nil {
 				a.Retained = append(a.Retained, r.Name)
-				for id, m := range previous.Models {
+				for id, m := range prior.Models {
 					for _, ms := range m.Measurements {
 						if strings.HasPrefix(ms.Source, r.Name+":") {
 							kept := source.Measured{ModelID: id, Measurement: ms}
@@ -195,9 +207,15 @@ func Assemble(results []SourceResult, overlay source.Overlay, overrides Override
 					}
 				}
 			}
-			a.Notes = append(a.Notes, source.Note{Source: r.Name, Kind: "source_failed", Message: r.Error})
-		case "skipped":
-			a.Notes = append(a.Notes, source.Note{Source: r.Name, Kind: "source_skipped", Message: "no credential; nothing imported"})
+			if r.Status == "failed" {
+				a.Notes = append(a.Notes, source.Note{Source: r.Name, Kind: "source_failed", Message: r.Error})
+			} else {
+				message := "no credential; nothing imported"
+				if prior != nil {
+					message = "no credential; previous data retained"
+				}
+				a.Notes = append(a.Notes, source.Note{Source: r.Name, Kind: "source_skipped", Message: message})
+			}
 		}
 	}
 

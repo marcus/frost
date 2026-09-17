@@ -220,6 +220,74 @@ type refreshReport struct {
 	Measurements int                  `json:"measurement_count"`
 }
 
+type outputPath struct {
+	label     string
+	path      string
+	canonical string
+	info      os.FileInfo
+}
+
+// validateOutputPaths resolves lexical aliases, symlinked parents, symlinked
+// files, and existing hard links before refresh can mutate any destination.
+func validateOutputPaths(out, restricted string) (string, error) {
+	suggestions := filepath.Join(filepath.Dir(out), "latency.suggestions.json")
+	outputs := []outputPath{{label: "--out", path: out}, {label: "latency suggestions", path: suggestions}}
+	if restricted != "" {
+		outputs = append(outputs, outputPath{label: "--restricted-out", path: restricted})
+	}
+	for i := range outputs {
+		canonical, err := canonicalOutputPath(outputs[i].path)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s %q: %w", outputs[i].label, outputs[i].path, err)
+		}
+		outputs[i].canonical = canonical
+		info, err := os.Stat(outputs[i].path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect %s %q: %w", outputs[i].label, outputs[i].path, err)
+		}
+		outputs[i].info = info
+	}
+	for i := range outputs {
+		for j := i + 1; j < len(outputs); j++ {
+			same := outputs[i].canonical == outputs[j].canonical
+			if outputs[i].info != nil && outputs[j].info != nil {
+				same = same || os.SameFile(outputs[i].info, outputs[j].info)
+			}
+			if same {
+				return "", fmt.Errorf("%s %q and %s %q resolve to the same output; output paths must be distinct", outputs[i].label, outputs[i].path, outputs[j].label, outputs[j].path)
+			}
+		}
+	}
+	return suggestions, nil
+}
+
+func canonicalOutputPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	current := filepath.Clean(abs)
+	var missing []string
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return filepath.Clean(resolved), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Clean(abs), nil
+		}
+		missing = append(missing, filepath.Base(current))
+		current = parent
+	}
+}
+
 func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	fs := flag.NewFlagSet("refresh", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -237,6 +305,10 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 	if *out == "" {
 		return fail(stderr, sh.jsonOut, stdout, exitInput, errors.New("--out PATH is required"))
 	}
+	suggestionsOut, err := validateOutputPaths(*out, *restrictedOut)
+	if err != nil {
+		return fail(stderr, sh.jsonOut, stdout, exitInput, err)
+	}
 	overlayPath, err := resolveOverlay(sh.overlay)
 	if err != nil {
 		return fail(stderr, sh.jsonOut, stdout, exitInput, err)
@@ -253,14 +325,26 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 	if err != nil {
 		return fail(stderr, sh.jsonOut, stdout, exitInput, fmt.Errorf("current catalog: %w", err))
 	}
+	var restrictedCurrent *router.Catalog
+	if *restrictedOut != "" {
+		restrictedCurrent, err = build.LoadCurrent(*restrictedOut)
+		if err != nil {
+			return fail(stderr, sh.jsonOut, stdout, exitInput, fmt.Errorf("current restricted catalog: %w", err))
+		}
+	}
 	results := collect(ctx, sourceNames(*sources), *fixtures, *record, overlay, credentials(getenv), sh.timeout, stderr)
-	okCount, failCount := 0, 0
+	okCount, partialCount := 0, 0
 	for _, r := range results {
 		switch r.Status {
 		case "ok":
 			okCount++
 		case "failed":
-			failCount++
+			partialCount++
+		case "skipped":
+			src, _ := source.ByName(r.Name)
+			if *restrictedOut != "" && src != nil && src.Restricted() {
+				partialCount++
+			}
 		}
 	}
 	report := refreshReport{Sources: results, DryRun: *dryRun}
@@ -272,7 +356,7 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 		_, _ = fmt.Fprintln(stderr, "catalog-build: every source failed; nothing published")
 		return exitNothing
 	}
-	asm, err := build.Assemble(results, overlay, overrides, current, time.Now().UTC(), *restrictedOut != "")
+	asm, err := build.AssembleWithRestrictedPrevious(results, overlay, overrides, current, restrictedCurrent, time.Now().UTC(), *restrictedOut != "")
 	if err != nil {
 		return fail(stderr, sh.jsonOut, stdout, exitInput, err)
 	}
@@ -295,14 +379,13 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 			}
 			report.Restricted = *restrictedOut
 		}
-		sugg := filepath.Join(filepath.Dir(*out), "latency.suggestions.json")
-		if err := build.WriteJSONAtomic(sugg, asm.Suggestions); err != nil {
+		if err := build.WriteJSONAtomic(suggestionsOut, asm.Suggestions); err != nil {
 			return fail(stderr, sh.jsonOut, stdout, exitInput, fmt.Errorf("latency suggestions: %w", err))
 		}
-		report.Suggestions = sugg
+		report.Suggestions = suggestionsOut
 	}
 	report.Exit = exitOK
-	if failCount > 0 {
+	if partialCount > 0 {
 		report.Exit = exitPartial
 	}
 	report.OK = report.Exit == exitOK

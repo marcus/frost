@@ -51,6 +51,16 @@ func RenderHuman(w io.Writer, d router.Decision) {
 		if der.ReviewGuidance != "" {
 			outf(w, "Check the result with %s.\n", der.ReviewGuidance)
 		}
+		if r := d.Recommendation; r.Availability != string(router.NotConsidered) && r.Availability != "" {
+			line := "Included usage: " + r.Availability
+			if r.AvailabilityBasis != "" && r.AvailabilityBasis != "none" {
+				line += " (" + r.AvailabilityBasis + ")"
+			}
+			if r.ExpiryPreferred {
+				line += ", preferred because its allowance expires soon"
+			}
+			outln(w, line+".")
+		}
 	}
 	for _, a := range d.Alternatives {
 		outf(w, "%s: %s", strings.ToUpper(a.Role[:1])+a.Role[1:], headline(a))
@@ -90,9 +100,14 @@ func basis(d router.Decision) string {
 	default:
 		parts = append(parts, d.Status)
 	}
-	if d.Provenance.CapacityUsed {
+	switch {
+	case d.Provenance.CapacityAgeMin != nil && d.Provenance.CapacityBasis != "" && d.Provenance.CapacityBasis != "unknown":
+		parts = append(parts, fmt.Sprintf("quota observed %d minutes ago (%s)", *d.Provenance.CapacityAgeMin, d.Provenance.CapacityBasis))
+	case d.Provenance.CapacityAgeMin != nil:
+		parts = append(parts, fmt.Sprintf("quota observed %d minutes ago, not usable", *d.Provenance.CapacityAgeMin))
+	case d.Provenance.CapacityUsed:
 		parts = append(parts, "capacity snapshot considered")
-	} else {
+	default:
 		parts = append(parts, "capacity not considered")
 	}
 	if d.Provenance.AnalyzerModel != "" {

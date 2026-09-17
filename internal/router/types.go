@@ -118,6 +118,7 @@ type Constraints struct {
 	RequiredCapabilities []string       `json:"required_capabilities,omitempty"`
 	Effort               string         `json:"effort,omitempty"`
 	Latency              *LatencyTarget `json:"latency,omitempty"`
+	Availability         string         `json:"availability,omitempty"` // exclude | demote | ignore; overrides policy.capacity.enforce_availability
 }
 
 // LatencyTarget is an explicit response-time constraint.
@@ -249,6 +250,18 @@ type Policy struct {
 	PriorMaxQualityRankByLevel []int          `json:"prior_max_quality_rank_by_level,omitempty"`
 	RelaxedLevelReduction      int            `json:"relaxed_level_reduction"`
 	AdequacyRules              []AdequacyRule `json:"adequacy_rules,omitempty"`
+	Capacity                   CapacityPolicy `json:"capacity"`
+}
+
+// CapacityPolicy governs how a usage snapshot affects selection. Every
+// value is a headroom policy, never a promise that a job fits.
+type CapacityPolicy struct {
+	PreferExpiringIncludedUsage bool    `json:"prefer_expiring_included_usage"`
+	ExpiryHorizonHours          float64 `json:"expiry_horizon_hours"`
+	ReservePercent              float64 `json:"reserve_percent"`
+	MaxSnapshotAgeMinutes       float64 `json:"max_snapshot_age_minutes"`
+	AllowEstimatedMeasurements  bool    `json:"allow_estimated_measurements"`
+	EnforceAvailability         bool    `json:"enforce_availability"`
 }
 
 // DefaultPolicy returns the proposal defaults from the plan. They are not
@@ -264,15 +277,92 @@ func DefaultPolicy() Policy {
 		LargeWorkloadThreshold:     2.5,
 		EffortByLevel:              []string{"low", "medium", "high", "high", "xhigh"},
 		RelaxedLevelReduction:      1,
+		Capacity: CapacityPolicy{
+			PreferExpiringIncludedUsage: true,
+			ExpiryHorizonHours:          24,
+			ReservePercent:              5,
+			MaxSnapshotAgeMinutes:       15,
+			AllowEstimatedMeasurements:  false,
+			EnforceAvailability:         true,
+		},
 	}
 }
 
-// Capacity is the neutral usage snapshot. Slice 2 fills it in; Recommend
-// accepts nil and says capacity was not considered.
+// Capacity is the neutral usage snapshot: observations keyed by the pool and
+// window IDs the operator config declares. Recommend accepts nil and says
+// capacity was not considered.
 type Capacity struct {
-	GeneratedAt time.Time `json:"generated_at"`
-	Producer    string    `json:"producer,omitempty"`
+	GeneratedAt time.Time   `json:"generated_at"`
+	Producer    string      `json:"producer,omitempty"`
+	Pools       []PoolState `json:"pools"`
 }
+
+// PoolState is one pool's observation.
+type PoolState struct {
+	ID           string        `json:"id"`
+	SourceStatus string        `json:"source_status"` // ok | unavailable | error | ambiguous_account
+	Measurement  string        `json:"measurement"`   // exact | estimated | unknown
+	ObservedAt   *time.Time    `json:"observed_at"`
+	ValidUntil   *time.Time    `json:"valid_until"`
+	Windows      []WindowState `json:"windows"`
+}
+
+// WindowState is one allowance window inside a pool. A nil remaining
+// percentage is unknown; zero is exhausted.
+type WindowState struct {
+	ID               string     `json:"id"`
+	RemainingPercent *float64   `json:"remaining_percent"`
+	ResetsAt         *time.Time `json:"resets_at"`
+	DurationSeconds  int        `json:"duration_seconds,omitempty"`
+}
+
+// Pool is one shared quota allowance as the operator declares it. The
+// snapshot supplies observations; only this declaration defines topology.
+type Pool struct {
+	ID                        string   `json:"id"`
+	Kind                      string   `json:"kind"`          // subscription | metered | prepaid
+	MarginalCost              string   `json:"marginal_cost"` // included | metered
+	MappingVerified           bool     `json:"mapping_verified"`
+	RequiredWindowIDs         []string `json:"required_window_ids"`
+	ExpiryPreferenceWindowIDs []string `json:"expiry_preference_window_ids,omitempty"`
+	NonRolloverWindowIDs      []string `json:"non_rollover_window_ids,omitempty"`
+}
+
+// Snapshot enums.
+const (
+	SourceOK               = "ok"
+	SourceUnavailable      = "unavailable"
+	SourceError            = "error"
+	SourceAmbiguousAccount = "ambiguous_account"
+
+	MeasurementExact     = "exact"
+	MeasurementEstimated = "estimated"
+	MeasurementUnknown   = "unknown"
+
+	PoolKindSubscription = "subscription"
+	PoolKindMetered      = "metered"
+	PoolKindPrepaid      = "prepaid"
+	MarginalIncluded     = "included"
+	MarginalMetered      = "metered"
+)
+
+// Availability of a pool or profile given a snapshot.
+type Availability string
+
+// Availability values. NotConsidered means no snapshot applied.
+const (
+	Available     Availability = "available"
+	Exhausted     Availability = "exhausted"
+	Unknown       Availability = "unknown"
+	NotConsidered Availability = "not_considered"
+)
+
+// Availability handling modes, per call or from policy.
+const (
+	AvailabilityExclude = "exclude"
+	AvailabilityDemote  = "demote"
+	AvailabilityIgnore  = "ignore"
+)
 
 // Decision is the complete result of one recommendation.
 type Decision struct {
@@ -290,19 +380,22 @@ type Decision struct {
 
 // Selection is a selected or alternative profile with its applicable effort.
 type Selection struct {
-	Role                string  `json:"role"` // recommended | cheaper | stronger | faster | conditional
-	ProfileID           string  `json:"profile_id"`
-	ModelLabel          string  `json:"model_label"`
-	AccessSurface       string  `json:"access_surface"`
-	OutputContract      string  `json:"output_contract"`
-	GenerationMechanism string  `json:"generation_mechanism,omitempty"`
-	EffortIntent        string  `json:"effort_intent,omitempty"`
-	NativeEffort        *string `json:"native_effort"`
-	MappingVerified     bool    `json:"mapping_verified"`
-	LatencyClass        string  `json:"latency_class,omitempty"`
-	AdequacyBasis       string  `json:"adequacy_basis"`
-	Availability        string  `json:"availability"`
-	Reason              string  `json:"reason,omitempty"`
+	Role                string     `json:"role"` // recommended | cheaper | stronger | faster | conditional
+	ProfileID           string     `json:"profile_id"`
+	ModelLabel          string     `json:"model_label"`
+	AccessSurface       string     `json:"access_surface"`
+	OutputContract      string     `json:"output_contract"`
+	GenerationMechanism string     `json:"generation_mechanism,omitempty"`
+	EffortIntent        string     `json:"effort_intent,omitempty"`
+	NativeEffort        *string    `json:"native_effort"`
+	MappingVerified     bool       `json:"mapping_verified"`
+	LatencyClass        string     `json:"latency_class,omitempty"`
+	AdequacyBasis       string     `json:"adequacy_basis"`
+	Availability        string     `json:"availability"`       // available | exhausted | unknown | not_considered
+	AvailabilityBasis   string     `json:"availability_basis"` // exact | estimated | unknown | none
+	CapacityObservedAt  *time.Time `json:"capacity_observed_at"`
+	ExpiryPreferred     bool       `json:"expiry_preferred"`
+	Reason              string     `json:"reason,omitempty"`
 }
 
 // Exclusion records a candidate that was removed and why.
@@ -334,27 +427,32 @@ type Derived struct {
 	ReviewGuidance      string   `json:"review_guidance"`
 	LargeWorkload       bool     `json:"large_workload"`
 	MissingContext      bool     `json:"missing_context"`
+	AvailabilityMode    string   `json:"availability_mode"` // exclude | demote | ignore | none
 }
 
 // Provenance identifies every input that shaped the decision.
 type Provenance struct {
-	GeneratedAt      time.Time `json:"generated_at"`
-	ProgramVersion   string    `json:"program_version"`
-	CatalogVersion   string    `json:"catalog_version"`
-	CatalogHash      string    `json:"catalog_hash,omitempty"`
-	PolicyHash       string    `json:"policy_hash,omitempty"`
-	QuestionsVersion string    `json:"questions_version"`
-	QuestionsHash    string    `json:"questions_hash"`
-	AnalyzerModel    string    `json:"analyzer_model"`
-	CapacityHash     string    `json:"capacity_hash,omitempty"`
-	CapacityUsed     bool      `json:"capacity_used"`
-	EvidenceBases    []string  `json:"evidence_bases"`
+	GeneratedAt      time.Time  `json:"generated_at"`
+	ProgramVersion   string     `json:"program_version"`
+	CatalogVersion   string     `json:"catalog_version"`
+	CatalogHash      string     `json:"catalog_hash,omitempty"`
+	PolicyHash       string     `json:"policy_hash,omitempty"`
+	QuestionsVersion string     `json:"questions_version"`
+	QuestionsHash    string     `json:"questions_hash"`
+	AnalyzerModel    string     `json:"analyzer_model"`
+	CapacityHash     string     `json:"capacity_hash,omitempty"`
+	CapacityUsed     bool       `json:"capacity_used"`
+	CapacityObserved *time.Time `json:"capacity_observed_at,omitempty"`
+	CapacityAgeMin   *int       `json:"capacity_age_minutes,omitempty"`
+	CapacityBasis    string     `json:"capacity_basis,omitempty"` // exact | estimated | stale | unknown
+	EvidenceBases    []string   `json:"evidence_bases"`
 }
 
 // Inputs bundles everything Recommend needs besides the task and assessment.
 type Inputs struct {
 	Catalog  Catalog
 	Profiles []Profile
+	Pools    []Pool
 	Capacity *Capacity
 	Policy   Policy
 	Now      time.Time

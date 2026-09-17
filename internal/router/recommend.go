@@ -41,14 +41,23 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 		d.DecisionReasons = conflicts
 		return d
 	}
-	if in.Capacity == nil {
-		d.Warnings = append(d.Warnings, "Capacity was not considered: no snapshot supplied.")
-	} else {
-		d.Warnings = append(d.Warnings, "Capacity snapshot supplied but capacity-aware selection is not implemented yet; it did not affect this decision.")
-	}
-
 	der := &d.Analysis.Derived
 	der.ReasoningQuantile = pol.UncertainReasoningQuantile
+
+	// Capacity: resolve the handling mode, then evaluate the snapshot once.
+	der.AvailabilityMode = availabilityMode(c, pol)
+	var capEval CapacityEvaluation
+	capacityOn := in.Capacity != nil && der.AvailabilityMode != AvailabilityIgnore
+	switch {
+	case in.Capacity == nil:
+		d.Warnings = append(d.Warnings, "Capacity was not considered: no snapshot supplied.")
+	case der.AvailabilityMode == AvailabilityIgnore:
+		d.Warnings = append(d.Warnings, "Capacity was not considered: availability handling set to ignore.")
+	default:
+		capEval = EvaluatePools(in.Capacity, in.Pools, in.Profiles, pol.Capacity, in.Now)
+		d.Warnings = append(d.Warnings, capEval.Warnings...)
+		d.Provenance.CapacityUsed = capEval.Used
+	}
 
 	// Missing context: the analyzer could not identify a job at all.
 	if noul, ok := a.Nouls[QMissingContext]; ok && noul >= pol.MissingContextThreshold {
@@ -96,7 +105,11 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 
 	if w, ok := a.Scores[QWorkload]; ok && w.Mean >= pol.LargeWorkloadThreshold {
 		der.LargeWorkload = true
-		d.Warnings = append(d.Warnings, "Large workload: whether the whole job fits in any capacity or session is uncertain.")
+		msg := "Large workload: whether the whole job fits in any capacity or session is uncertain."
+		if capacityOn && capEval.Used {
+			msg += " The reserve is a headroom policy, not a fit guarantee."
+		}
+		d.Warnings = append(d.Warnings, msg)
 	}
 
 	// Task families, output contract, capabilities.
@@ -121,7 +134,11 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 			d.ExcludedCandidates = append(d.ExcludedCandidates, Exclusion{ProfileID: p.ID, Reason: reason})
 			continue
 		}
-		candidates = append(candidates, cand{p: p, m: in.Catalog.Models[p.ModelID]})
+		cd := cand{p: p, m: in.Catalog.Models[p.ModelID], av: ProfileAvailability{Availability: NotConsidered, Basis: "none"}}
+		if capacityOn {
+			cd.av = capEval.Profiles[p.ID]
+		}
+		candidates = append(candidates, cd)
 	}
 	sortExclusions(d.ExcludedCandidates)
 	if len(candidates) == 0 {
@@ -145,6 +162,22 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 		}
 	}
 	sortExclusions(d.ExcludedCandidates)
+
+	// Availability gate (step 3). Exhausted excludes only in exclude mode and
+	// only on a counted (fresh, applicable, exact or opted-in) observation;
+	// unknown never excludes.
+	if capacityOn && der.AvailabilityMode == AvailabilityExclude {
+		kept := adequate[:0]
+		for _, cd := range adequate {
+			if cd.av.Availability == Exhausted {
+				d.ExcludedCandidates = append(d.ExcludedCandidates, Exclusion{ProfileID: cd.p.ID, Reason: "Exhausted included usage: " + strings.Join(cd.av.Reasons, "; ") + "."})
+				continue
+			}
+			kept = append(kept, cd)
+		}
+		adequate = kept
+		sortExclusions(d.ExcludedCandidates)
+	}
 	if len(adequate) == 0 {
 		d.Status = StatusNoMatch
 		d.DecisionReasons = append(d.DecisionReasons, fmt.Sprintf("No candidate meets the adequacy floor at reasoning level %d.", level))
@@ -160,11 +193,30 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 		d.Warnings = append(d.Warnings, fmt.Sprintf("Required %d ms %s target cannot be verified: only latency classes (priors) are available. Fastest adequate class selected.", c.Latency.TargetMS, c.Latency.Milestone))
 	}
 
-	// Objective, then cost and stable ID.
-	ordered := order(adequate, mode)
+	// Objective, then availability and expiry inside the tie group, then cost
+	// and stable ID.
+	ordered := order(adequate, mode, capacityOn)
 	winner := ordered[0]
+	plain := order(adequate, mode, false)[0]
+	capacityChangedWinner := capacityOn && plain.p.ID != winner.p.ID
 	d.Recommendation = ptr(selection(winner, "recommended", der, winnerReason(winner, mode, level)))
 	d.Provenance.EvidenceBases = append(d.Provenance.EvidenceBases, winner.basis)
+	if capacityOn {
+		d.Provenance.CapacityObserved = winner.av.ObservedAt
+		d.Provenance.CapacityAgeMin = winner.av.AgeMinutes
+		d.Provenance.CapacityBasis = winner.av.Basis
+		if capacityChangedWinner {
+			d.Recommendation.ExpiryPreferred = winner.av.ExpiryEligible
+			d.DecisionReasons = append(d.DecisionReasons, capacityReason(winner, plain))
+		}
+		switch winner.av.Availability {
+		case Exhausted:
+			d.Warnings = append(d.Warnings, "Selected profile "+winner.p.ID+" has exhausted included usage: "+strings.Join(winner.av.Reasons, "; ")+".")
+		case Unknown:
+			d.Warnings = append(d.Warnings, "Availability of "+winner.p.ID+" is unknown: "+strings.Join(winner.av.Reasons, "; ")+".")
+		default:
+		}
+	}
 
 	// Alternatives.
 	if level > meanLevel {
@@ -178,22 +230,30 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 			}
 		}
 		if len(atMean) > 0 {
-			cheap := order(atMean, ModeAdequate)[0]
+			cheap := order(atMean, ModeAdequate, capacityOn)[0]
 			if cheaperThan(cheap, winner) {
 				d.Alternatives = append(d.Alternatives, selection(cheap, "cheaper", der, fmt.Sprintf("Adequate if the task is really level %d (the rounded mean); cheaper by the configured order.", meanLevel)))
 			}
 		}
 	}
 	if mode != ModeQuality {
-		strong := order(adequate, ModeQuality)[0]
+		strong := order(adequate, ModeQuality, capacityOn)[0]
 		if strong.p.ID != winner.p.ID && strongerThan(strong, winner) {
 			d.Alternatives = append(d.Alternatives, selection(strong, "stronger", der, "Higher quality prior; higher expected resource use."))
 		}
 	}
 	if mode != ModeFast {
-		fast := order(adequate, ModeFast)[0]
+		fast := order(adequate, ModeFast, capacityOn)[0]
 		if fast.p.ID != winner.p.ID && latencyRank(fast.p.LatencyClass) < latencyRank(winner.p.LatencyClass) {
 			d.Alternatives = append(d.Alternatives, selection(fast, "faster", der, "Faster latency class (a prior, not a measurement)."))
+		}
+	}
+	if capacityOn && winner.av.Availability != Available {
+		for _, cd := range ordered[1:] {
+			if cd.av.Availability == Available {
+				d.Alternatives = append(d.Alternatives, selection(cd, "available", der, "Adequate with known included usage: "+strings.Join(cd.av.Reasons, "; ")+"."))
+				break
+			}
 		}
 	}
 	for _, u := range unknown {
@@ -233,6 +293,7 @@ type cand struct {
 	adequacy    adequacyState
 	basis       string
 	basisDetail string
+	av          ProfileAvailability
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -249,6 +310,9 @@ func conflicts(c Constraints, pol Policy) []string {
 	}
 	if c.Effort != "" && !slices.Contains(EffortLadder, c.Effort) {
 		out = append(out, "Unknown effort "+c.Effort+".")
+	}
+	if c.Availability != "" && !slices.Contains([]string{AvailabilityExclude, AvailabilityDemote, AvailabilityIgnore}, c.Availability) {
+		out = append(out, "Unknown availability mode "+c.Availability+" (exclude, demote, or ignore).")
 	}
 	if c.Latency != nil {
 		if c.Latency.TargetMS <= 0 {
@@ -527,19 +591,49 @@ func costRank(cd cand) int {
 func cheaperThan(a, b cand) bool  { return costRank(a) > costRank(b) }
 func strongerThan(a, b cand) bool { return qualityRank(a) < qualityRank(b) }
 
-// order sorts by the objective, then cost (cheaper first), then stable ID.
-func order(cs []cand, mode string) []cand {
+// objectiveKey is the comparable the mode sorts on; lower is better.
+// Candidates sharing a key form a tie group.
+func objectiveKey(cd cand, mode string) int {
+	switch mode {
+	case ModeQuality:
+		return qualityRank(cd)
+	case ModeFast:
+		return latencyRank(cd.p.LatencyClass)
+	}
+	return 0
+}
+
+func availabilityRank(a Availability) int {
+	switch a {
+	case Available:
+		return 0
+	case NotConsidered, Unknown:
+		return 1
+	default:
+		return 2 // exhausted (only present in demote mode)
+	}
+}
+
+// order sorts by the objective key, then within the tie group by
+// availability, expiry preference (earlier designated reset first), cost
+// (cheaper first), and stable ID. With capacity off the middle steps are
+// no-ops, so slice 1 behavior is unchanged.
+func order(cs []cand, mode string, capacity bool) []cand {
 	out := slices.Clone(cs)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		switch mode {
-		case ModeQuality:
-			if qualityRank(a) != qualityRank(b) {
-				return qualityRank(a) < qualityRank(b)
+		if ka, kb := objectiveKey(a, mode), objectiveKey(b, mode); ka != kb {
+			return ka < kb
+		}
+		if capacity {
+			if ra, rb := availabilityRank(a.av.Availability), availabilityRank(b.av.Availability); ra != rb {
+				return ra < rb
 			}
-		case ModeFast:
-			if latencyRank(a.p.LatencyClass) != latencyRank(b.p.LatencyClass) {
-				return latencyRank(a.p.LatencyClass) < latencyRank(b.p.LatencyClass)
+			if a.av.ExpiryEligible != b.av.ExpiryEligible {
+				return a.av.ExpiryEligible
+			}
+			if a.av.ExpiryEligible && b.av.ExpiryEligible && !a.av.ExpiryAt.Equal(*b.av.ExpiryAt) {
+				return a.av.ExpiryAt.Before(*b.av.ExpiryAt)
 			}
 		}
 		if costRank(a) != costRank(b) {
@@ -548,6 +642,25 @@ func order(cs []cand, mode string) []cand {
 		return a.p.ID < b.p.ID
 	})
 	return out
+}
+
+// capacityReason explains why capacity moved the winner ahead of the
+// cost-only choice.
+func capacityReason(w, plain cand) string {
+	if w.av.ExpiryEligible && w.av.ExpiryAt != nil {
+		return fmt.Sprintf("Preferred %s over %s because its included allowance expires sooner (%s).", w.p.ID, plain.p.ID, strings.Join(w.av.Reasons, "; "))
+	}
+	return fmt.Sprintf("Preferred %s over %s on availability: %s is %s (%s).", w.p.ID, plain.p.ID, plain.p.ID, plain.av.Availability, strings.Join(plain.av.Reasons, "; "))
+}
+
+func availabilityMode(c Constraints, pol Policy) string {
+	if c.Availability != "" {
+		return c.Availability
+	}
+	if pol.Capacity.EnforceAvailability {
+		return AvailabilityExclude
+	}
+	return AvailabilityDemote
 }
 
 func winnerReason(w cand, mode string, level int) string {
@@ -573,8 +686,14 @@ func selection(cd cand, role string, der *Derived, reason string) Selection {
 		MappingVerified:     cd.p.MappingVerified,
 		LatencyClass:        cd.p.LatencyClass,
 		AdequacyBasis:       cd.basis,
-		Availability:        "configured",
+		Availability:        string(cd.av.Availability),
+		AvailabilityBasis:   cd.av.Basis,
+		CapacityObservedAt:  cd.av.ObservedAt,
 		Reason:              reason,
+	}
+	if s.Availability == "" {
+		s.Availability = string(NotConsidered)
+		s.AvailabilityBasis = "none"
 	}
 	if s.OutputContract == "" {
 		s.OutputContract = "unspecified"

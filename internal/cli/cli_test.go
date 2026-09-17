@@ -307,3 +307,78 @@ func TestConfigResolutionOrder(t *testing.T) {
 	}
 	_ = errors.New
 }
+
+const fixtureSnapshot = "../capacity/testdata/codexbar-shape.json"
+
+func TestCapacityCheckAndRoute(t *testing.T) {
+	h := newHarness()
+	// The fixture is dated 2026-09-17T00:59Z; the harness clock is 01:00Z.
+	if code := h.run("capacity", "check", fixtureSnapshot, "--config", exampleConfig); code != ExitOK {
+		t.Fatalf("exit %d: %s%s", code, h.stdout.String(), h.stderr.String())
+	}
+	out := h.stdout.String()
+	for _, want := range []string{"pool codex-main", "available", "pool codex-spark", "unknown", "binding unverified", "profile deepseek-4.1-flash", "estimated"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if code := h.run("capacity", "check", fixtureSnapshot, "--config", exampleConfig, "--json"); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+	var ev map[string]any
+	if err := json.Unmarshal(h.stdout.Bytes(), &ev); err != nil {
+		t.Fatal(err)
+	}
+	if ev["ok"] != true || ev["used"] != true {
+		t.Fatalf("%v", ev)
+	}
+	// Route with the snapshot: provenance carries the hash and the human
+	// output shows the observation age.
+	if code := h.run("route", "--config", exampleConfig, "--capacity", fixtureSnapshot, "--json", "Fix a typo."); code != ExitOK {
+		t.Fatalf("exit %d %s", code, h.stderr.String())
+	}
+	var d router.Decision
+	json.Unmarshal(h.stdout.Bytes(), &d)
+	if d.Provenance.CapacityHash == "" || !d.Provenance.CapacityUsed || d.Recommendation.Availability == string(router.NotConsidered) {
+		t.Fatalf("provenance %+v rec %+v", d.Provenance, d.Recommendation)
+	}
+	if code := h.run("route", "--config", exampleConfig, "--capacity", fixtureSnapshot, "Fix a typo."); code != ExitOK || !strings.Contains(h.stdout.String(), "quota observed 1 minutes ago") {
+		t.Fatalf("exit %d:\n%s", code, h.stdout.String())
+	}
+	// Bad availability mode is a conflict; ignore mode skips capacity.
+	if code := h.run("route", "--config", exampleConfig, "--capacity", fixtureSnapshot, "--availability", "maybe", "x"); code != ExitNoRoute {
+		t.Fatalf("exit %d", code)
+	}
+	if code := h.run("route", "--config", exampleConfig, "--capacity", fixtureSnapshot, "--availability", "ignore", "--json", "x"); code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+	json.Unmarshal(h.stdout.Bytes(), &d)
+	if d.Provenance.CapacityUsed || d.Analysis.Derived.AvailabilityMode != router.AvailabilityIgnore {
+		t.Fatalf("ignore must not use capacity: %+v", d.Provenance)
+	}
+	// An explicit snapshot that names an undeclared pool is an input error.
+	bad := filepath.Join(t.TempDir(), "bad.json")
+	os.WriteFile(bad, []byte(`{"schema_version":1,"generated_at":"2026-09-17T00:59:00Z","pools":[{"id":"nope","source_status":"ok","measurement":"exact","observed_at":null,"valid_until":null,"windows":[]}]}`), 0o600)
+	if code := h.run("route", "--config", exampleConfig, "--capacity", bad, "x"); code != ExitUsage {
+		t.Fatalf("exit %d", code)
+	}
+	if code := h.run("capacity", "check", bad, "--config", exampleConfig, "--json"); code != ExitUsage || !strings.Contains(h.stdout.String(), `"ok": false`) {
+		t.Fatalf("exit %d %s", code, h.stdout.String())
+	}
+	// Replay under a snapshot re-decides with the new hash.
+	rec := filepath.Join(t.TempDir(), "run.jsonl")
+	if code := h.run("route", "--config", exampleConfig, "--record", rec, "Fix a typo."); code != ExitOK {
+		t.Fatalf("%d", code)
+	}
+	if code := h.run("route", "--config", exampleConfig, "--replay", rec, "--capacity", fixtureSnapshot, "--json"); code != ExitOK {
+		t.Fatalf("%d %s", code, h.stderr.String())
+	}
+	json.Unmarshal(h.stdout.Bytes(), &d)
+	if !d.Provenance.CapacityUsed {
+		t.Fatalf("replay must apply the snapshot: %+v", d.Provenance)
+	}
+	// The configured default snapshot in the example does not exist: a note, not an error.
+	if code := h.run("route", "--config", exampleConfig, "x"); code != ExitOK || !strings.Contains(h.stderr.String(), "does not exist") {
+		t.Fatalf("exit %d stderr %s", code, h.stderr.String())
+	}
+}

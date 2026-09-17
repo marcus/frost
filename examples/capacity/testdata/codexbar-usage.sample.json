@@ -1,0 +1,129 @@
+[
+  {
+    "credits": {
+      "updatedAt": "2026-09-17T03:29:54Z",
+      "balanceIsWorkspace": false,
+      "remaining": 0,
+      "events": [],
+      "balanceReadSucceeded": true,
+      "creditsAvailable": false
+    },
+    "source": "oauth",
+    "provider": "codex",
+    "usage": {
+      "secondary": {
+        "windowMinutes": 10080,
+        "usedPercent": 44,
+        "resetsAt": "2026-09-19T13:29:45Z",
+        "resetDescription": "Sep 19 at 6:29 AM"
+      },
+      "tertiary": null,
+      "primary": null,
+      "dataConfidence": "exact",
+      "updatedAt": "2026-09-17T00:59:00Z",
+      "extraRateWindows": [
+        {
+          "title": "Codex Spark 5-hour",
+          "window": {
+            "resetsAt": "2026-09-17T08:29:54Z",
+            "usedPercent": 0,
+            "resetDescription": "tomorrow, 1:29 AM",
+            "windowMinutes": 300
+          },
+          "id": "codex-spark"
+        },
+        {
+          "title": "Codex Spark Weekly",
+          "window": {
+            "resetsAt": "2026-09-24T03:29:54Z",
+            "usedPercent": 0,
+            "resetDescription": "Sep 23 at 8:29 PM",
+            "windowMinutes": 10080
+          },
+          "id": "codex-spark-weekly"
+        }
+      ]
+    },
+    "pace": {
+      "secondary": {
+        "willLastToReset": true,
+        "deltaPercent": -21,
+        "stage": "farBehind",
+        "expectedUsedPercent": 65,
+        "summary": "21% in reserve | Expected 65% used | Lasts until reset | 1.5× headroom"
+      }
+    }
+  },
+  {
+    "pace": {
+      "primary": {
+        "summary": "58% in deficit | Expected 30% used | Projected empty in 13m",
+        "deltaPercent": 58,
+        "expectedUsedPercent": 30,
+        "stage": "farAhead",
+        "willLastToReset": false,
+        "etaSeconds": 736
+      },
+      "secondary": {
+        "summary": "16% in reserve | Expected 66% used | Lasts until reset",
+        "deltaPercent": -16,
+        "expectedUsedPercent": 66,
+        "stage": "farBehind",
+        "willLastToReset": true
+      }
+    },
+    "source": "web",
+    "provider": "claude",
+    "usage": {
+      "tertiary": null,
+      "secondary": {
+        "windowMinutes": 10080,
+        "resetsAt": "2026-09-19T13:00:00Z",
+        "resetDescription": "Sep 19 at 6:00AM",
+        "usedPercent": 44
+      },
+      "extraRateWindows": [
+        {
+          "title": "Fable only",
+          "window": {
+            "windowMinutes": 10080,
+            "resetsAt": "2026-09-19T13:00:00Z",
+            "usedPercent": 0
+          },
+          "id": "claude-weekly-scoped-fable"
+        }
+      ],
+      "updatedAt": "2026-09-17T00:59:00Z",
+      "primary": {
+        "windowMinutes": 300,
+        "resetsAt": "2026-09-17T07:00:00Z",
+        "resetDescription": "Sep 17 at 12:00AM",
+        "usedPercent": 61
+      },
+      "dataConfidence": "percentOnly"
+    }
+  },
+  {
+    "provider": "opencodego",
+    "usage": {
+      "updatedAt": "2026-09-17T00:59:00Z",
+      "dataConfidence": "estimated",
+      "primary": {
+        "windowMinutes": 300,
+        "usedPercent": 61,
+        "resetsAt": "2026-09-17T08:29:56Z"
+      },
+      "tertiary": {
+        "windowMinutes": 43200,
+        "usedPercent": 39.6,
+        "resetsAt": "2026-09-21T14:30:30Z"
+      },
+      "secondary": {
+        "windowMinutes": 10080,
+        "usedPercent": 44,
+        "resetsAt": "2026-09-20T23:59:59Z"
+      }
+    },
+    "source": "local"
+  }
+]

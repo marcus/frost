@@ -34,6 +34,7 @@ type Config struct {
 	SchemaVersion int
 	Path          string
 	CatalogFile   string // absolute
+	CapacityFile  string // absolute; optional default snapshot
 	Analyzer      AnalyzerConfig
 	Policy        router.Policy
 	Profiles      []router.Profile
@@ -51,17 +52,8 @@ type AnalyzerConfig struct {
 	TimeoutSeconds int
 }
 
-// Pool is one shared quota allowance. Slice 1 parses and validates
-// uniqueness; capacity-aware selection consumes it later.
-type Pool struct {
-	ID                        string
-	Kind                      string
-	MarginalCost              string
-	MappingVerified           bool
-	RequiredWindowIDs         []string
-	ExpiryPreferenceWindowIDs []string
-	NonRolloverWindowIDs      []string
-}
+// Pool is the router's quota-pool declaration; the TOML shape converts to it.
+type Pool = router.Pool
 
 // Problem is one validation finding.
 type Problem struct {
@@ -90,6 +82,7 @@ func HasErrors(ps []Problem) bool {
 type fileConfig struct {
 	SchemaVersion int           `toml:"schema_version"`
 	CatalogFile   string        `toml:"catalog_file"`
+	CapacityFile  string        `toml:"capacity_file"`
 	Analyzer      fileAnalyzer  `toml:"analyzer"`
 	Policy        filePolicy    `toml:"policy"`
 	Profiles      []fileProfile `toml:"profiles"`
@@ -118,6 +111,16 @@ type filePolicy struct {
 	RelaxedLevelReduction      *int           `toml:"relaxed_level_reduction"`
 	PriorMaxQualityRankByLevel []int          `toml:"prior_max_quality_rank_by_level"`
 	AdequacyRules              []fileAdequacy `toml:"adequacy_rules"`
+	Capacity                   fileCapacity   `toml:"capacity"`
+}
+
+type fileCapacity struct {
+	PreferExpiringIncludedUsage *bool    `toml:"prefer_expiring_included_usage"`
+	ExpiryHorizonHours          *float64 `toml:"expiry_horizon_hours"`
+	ReservePercent              *float64 `toml:"reserve_percent"`
+	MaxSnapshotAgeMinutes       *float64 `toml:"max_snapshot_age_minutes"`
+	AllowEstimatedMeasurements  *bool    `toml:"allow_estimated_measurements"`
+	EnforceAvailability         *bool    `toml:"enforce_availability"`
 }
 
 type fileAdequacy struct {
@@ -219,6 +222,7 @@ func Load(path string) (*Config, error) {
 		SchemaVersion: f.SchemaVersion,
 		Path:          abs,
 		CatalogFile:   resolveRel(dir, f.CatalogFile),
+		CapacityFile:  resolveRel(dir, f.CapacityFile),
 		Hash:          hex.EncodeToString(sum[:]),
 	}
 	cfg.Analyzer = AnalyzerConfig{
@@ -259,7 +263,15 @@ func Load(path string) (*Config, error) {
 		cfg.Profiles = append(cfg.Profiles, rp)
 	}
 	for _, p := range f.Pools {
-		cfg.Pools = append(cfg.Pools, Pool(p))
+		cfg.Pools = append(cfg.Pools, router.Pool{
+			ID:                        p.ID,
+			Kind:                      or(p.Kind, router.PoolKindSubscription),
+			MarginalCost:              or(p.MarginalCost, router.MarginalIncluded),
+			MappingVerified:           p.MappingVerified,
+			RequiredWindowIDs:         p.RequiredWindowIDs,
+			ExpiryPreferenceWindowIDs: p.ExpiryPreferenceWindowIDs,
+			NonRolloverWindowIDs:      p.NonRolloverWindowIDs,
+		})
 	}
 	return cfg, nil
 }
@@ -292,6 +304,19 @@ func mergePolicy(f filePolicy) router.Policy {
 	}
 	if f.PriorMaxQualityRankByLevel != nil {
 		p.PriorMaxQualityRankByLevel = f.PriorMaxQualityRankByLevel
+	}
+	c := &p.Capacity
+	if f.Capacity.PreferExpiringIncludedUsage != nil {
+		c.PreferExpiringIncludedUsage = *f.Capacity.PreferExpiringIncludedUsage
+	}
+	setF(&c.ExpiryHorizonHours, f.Capacity.ExpiryHorizonHours)
+	setF(&c.ReservePercent, f.Capacity.ReservePercent)
+	setF(&c.MaxSnapshotAgeMinutes, f.Capacity.MaxSnapshotAgeMinutes)
+	if f.Capacity.AllowEstimatedMeasurements != nil {
+		c.AllowEstimatedMeasurements = *f.Capacity.AllowEstimatedMeasurements
+	}
+	if f.Capacity.EnforceAvailability != nil {
+		c.EnforceAvailability = *f.Capacity.EnforceAvailability
 	}
 	for _, r := range f.AdequacyRules {
 		p.AdequacyRules = append(p.AdequacyRules, router.AdequacyRule{
@@ -405,16 +430,52 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 		}
 	}
 
+	cp := pol.Capacity
+	if cp.ExpiryHorizonHours <= 0 {
+		errf("policy.capacity.expiry_horizon_hours must be positive, got %g", cp.ExpiryHorizonHours)
+	}
+	if cp.MaxSnapshotAgeMinutes <= 0 {
+		errf("policy.capacity.max_snapshot_age_minutes must be positive, got %g", cp.MaxSnapshotAgeMinutes)
+	}
+	if cp.ReservePercent < 0 || cp.ReservePercent > 50 {
+		errf("policy.capacity.reserve_percent must be in [0, 50], got %g", cp.ReservePercent)
+	}
+
 	poolIDs := map[string]bool{}
 	for i, p := range c.Pools {
 		if p.ID == "" {
 			errf("pools[%d]: id is required", i)
 			continue
 		}
+		where := fmt.Sprintf("pools[%d] (%s)", i, p.ID)
 		if poolIDs[p.ID] {
-			errf("pools[%d]: duplicate pool id %q", i, p.ID)
+			errf("%s: duplicate pool id", where)
 		}
 		poolIDs[p.ID] = true
+		if !slices.Contains([]string{router.PoolKindSubscription, router.PoolKindMetered, router.PoolKindPrepaid}, p.Kind) {
+			errf("%s: kind %q must be subscription, metered, or prepaid", where, p.Kind)
+		}
+		if p.MarginalCost != router.MarginalIncluded && p.MarginalCost != router.MarginalMetered {
+			errf("%s: marginal_cost %q must be included or metered", where, p.MarginalCost)
+		}
+		if len(p.RequiredWindowIDs) == 0 {
+			warnf("%s: no required_window_ids; the pool can never be known", where)
+		}
+		wseen := map[string]bool{}
+		for _, w := range p.RequiredWindowIDs {
+			if wseen[w] {
+				errf("%s: duplicate window id %q", where, w)
+			}
+			wseen[w] = true
+		}
+		for _, w := range p.ExpiryPreferenceWindowIDs {
+			if !slices.Contains(p.RequiredWindowIDs, w) {
+				warnf("%s: expiry window %q is not a required window; it earns preference only when observed", where, w)
+			}
+		}
+		if !p.MappingVerified {
+			warnf("%s: mapping_verified is false; capacity is ignored for profiles bound to it", where)
+		}
 	}
 
 	profileIDs := map[string]bool{}

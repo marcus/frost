@@ -2,26 +2,30 @@
   {
     "pool_id": "codex-main",
     "provider": "codex",
-    "window_ids": [
-      "primary",
-      "secondary"
-    ]
+    "source": "oauth",
+    "window_ids": ["secondary"]
+  },
+  {
+    "pool_id": "codex-spark",
+    "provider": "codex",
+    "source": "oauth",
+    "window_ids": ["codex-spark", "codex-spark-weekly"]
+  },
+  {
+    "pool_id": "claude-main",
+    "provider": "claude",
+    "measurement": "exact",
+    "window_ids": ["primary", "secondary"]
+  },
+  {
+    "pool_id": "claude-fable",
+    "provider": "claude",
+    "measurement": "exact",
+    "window_ids": ["claude-weekly-scoped-fable"]
   },
   {
     "pool_id": "opencode-go",
     "provider": "opencodego",
-    "window_ids": [
-      "primary",
-      "secondary",
-      "tertiary"
-    ]
-  },
-  {
-    "pool_id": "antigravity-gemini",
-    "provider": "antigravity",
-    "window_ids": [
-      "antigravity-quota-summary-gemini-5h",
-      "antigravity-quota-summary-gemini-weekly"
-    ]
+    "window_ids": ["primary", "secondary", "tertiary"]
   }
 ]

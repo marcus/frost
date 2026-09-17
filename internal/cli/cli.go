@@ -11,11 +11,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/marcus/frost/internal/analyzer"
 	"github.com/marcus/frost/internal/analyzer/typesafe"
+	"github.com/marcus/frost/internal/capacity"
 	"github.com/marcus/frost/internal/catalog"
 	"github.com/marcus/frost/internal/config"
 	"github.com/marcus/frost/internal/evidence"
@@ -79,6 +81,8 @@ func Run(env Env) int {
 		return runProfiles(env, rest)
 	case "config":
 		return runConfig(env, rest)
+	case "capacity":
+		return runCapacity(env, rest)
 	case "explain":
 		return runExplain(env, rest)
 	case "version", "--version", "-v":
@@ -138,7 +142,7 @@ func liveAnalyzer(cfg config.AnalyzerConfig, spec *analyzer.Spec, apiKey string)
 }
 
 func usage(w io.Writer) {
-	out(w, `frost recommends a model and execution profile for a task. It never runs the task.
+	out(w, `frost recommends a model and execution profile for a task.
 
 Usage:
   frost route [flags] [--] "task text"
@@ -146,6 +150,7 @@ Usage:
   frost route --replay records.jsonl [--json]
   frost profiles list [--json]
   frost config check [--json] [--verify-model]
+  frost capacity check [PATH] [--json]
   frost explain decision.json
   frost version
 
@@ -161,6 +166,8 @@ Route flags:
   --require-cap CAPS     comma-separated required capabilities
   --latency-ms N         response-time target; with --latency-mode prefer|require
   --latency-milestone M  first_useful_response | complete_response
+  --capacity PATH        usage snapshot (else capacity_file from config); parse errors exit 2
+  --availability MODE    exclude | demote | ignore exhausted included usage (default from config)
   --record PATH          append the task text, answers, and decision to a JSONL file
   --replay PATH          recompute decisions from recorded answers; no provider call
 
@@ -176,6 +183,9 @@ type loaded struct {
 	catHash  string
 	spec     *analyzer.Spec
 	problems []config.Problem
+	capacity *router.Capacity
+	capHash  string
+	capNote  string // why capacity is absent, for stderr
 }
 
 func load(env Env, explicit string) (*loaded, error) {
@@ -212,12 +222,53 @@ func (l *loaded) inputs(env Env) router.Inputs {
 	return router.Inputs{
 		Catalog:        l.catalog,
 		Profiles:       l.cfg.Profiles,
+		Pools:          l.cfg.Pools,
+		Capacity:       l.capacity,
 		Policy:         l.cfg.Policy,
 		Now:            env.Now(),
 		ProgramVersion: env.Version,
 		CatalogHash:    l.catHash,
 		PolicyHash:     l.cfg.Hash,
+		CapacityHash:   l.capHash,
 	}
+}
+
+// loadCapacity attaches a snapshot: an explicit path must parse and fit the
+// declared pools; a configured default that is missing is only a note.
+func (l *loaded) loadCapacity(env Env, explicit string) error {
+	path := explicit
+	if path == "" {
+		path = l.cfg.CapacityFile
+	}
+	if path == "" {
+		return nil
+	}
+	now := env.Now()
+	cap, hash, err := capacity.Load(path, now)
+	if err != nil {
+		if explicit == "" && errors.Is(err, os.ErrNotExist) {
+			l.capNote = "capacity_file " + path + " does not exist; capacity not considered"
+			return nil
+		}
+		return err
+	}
+	problems := capacity.Validate(cap, l.cfg.Pools, now)
+	if capacity.HasErrors(problems) {
+		var msgs []string
+		for _, p := range problems {
+			if p.Severity == capacity.SeverityError {
+				msgs = append(msgs, p.Message)
+			}
+		}
+		err := fmt.Errorf("snapshot %s: %s", path, strings.Join(msgs, "; "))
+		if explicit == "" {
+			l.capNote = err.Error() + "; capacity not considered"
+			return nil
+		}
+		return err
+	}
+	l.capacity, l.capHash = &cap, hash
+	return nil
 }
 
 // request is the versioned --request object.
@@ -233,7 +284,7 @@ type routeFlags struct {
 	configPath, file, requestPath, record, replay    string
 	stdin, jsonOut                                   bool
 	policy, allow, exclude, effort, family, contract string
-	caps                                             string
+	caps, capacityPath, availability                 string
 	latencyMS                                        int
 	latencyMode, latencyMilestone                    string
 }
@@ -258,6 +309,8 @@ func newRouteFlags(stderr io.Writer) *routeFlags {
 	f.fs.StringVar(&f.latencyMilestone, "latency-milestone", "", "")
 	f.fs.StringVar(&f.record, "record", "", "")
 	f.fs.StringVar(&f.replay, "replay", "", "")
+	f.fs.StringVar(&f.capacityPath, "capacity", "", "")
+	f.fs.StringVar(&f.availability, "availability", "", "")
 	return f
 }
 
@@ -269,6 +322,12 @@ func runRoute(env Env, args []string) int {
 	l, err := load(env, f.configPath)
 	if err != nil {
 		return fail(env, f.jsonOut, ExitUsage, err)
+	}
+	if err := l.loadCapacity(env, f.capacityPath); err != nil {
+		return fail(env, f.jsonOut, ExitUsage, err)
+	}
+	if l.capNote != "" {
+		outln(env.Stderr, "frost: "+l.capNote)
 	}
 
 	if f.replay != "" {
@@ -316,6 +375,7 @@ func runRoute(env Env, args []string) int {
 			Decision:       &d,
 			CatalogHash:    l.catHash,
 			PolicyHash:     l.cfg.Hash,
+			CapacityHash:   l.capHash,
 		}
 		if err := store.Append(rec); err != nil {
 			outln(env.Stderr, "record: "+err.Error())
@@ -338,6 +398,9 @@ func runReplay(env Env, f *routeFlags, l *loaded) int {
 		task := rec.Task
 		if f.policy != "" {
 			task.Constraints.Policy = f.policy
+		}
+		if f.availability != "" {
+			task.Constraints.Availability = f.availability
 		}
 		d := router.Recommend(task, rec.Assessment, l.inputs(env))
 		if n > 0 && !f.jsonOut {
@@ -445,6 +508,9 @@ func resolveTask(env Env, f *routeFlags) (router.Task, error) {
 	}
 	if f.caps != "" {
 		c.RequiredCapabilities = splitList(f.caps)
+	}
+	if f.availability != "" {
+		c.Availability = f.availability
 	}
 	if f.latencyMS != 0 || f.latencyMode != "" || f.latencyMilestone != "" {
 		if c.Latency == nil {
@@ -566,6 +632,8 @@ func runConfig(env Env, args []string) int {
 		outf(env.Stdout, "questions %s (%s)\n", l.cfg.Analyzer.QuestionsFile, l.spec.Version)
 		outf(env.Stdout, "analyzer  %s %s\n", l.cfg.Analyzer.Provider, l.cfg.Analyzer.Model)
 		outf(env.Stdout, "policy    %s mode, quantile %.2f\n", l.cfg.Policy.Mode, l.cfg.Policy.UncertainReasoningQuantile)
+		cp := l.cfg.Policy.Capacity
+		outf(env.Stdout, "capacity  file %s; enforce %v, estimated %v, horizon %gh, reserve %g%%, max age %gm\n", orDash(l.cfg.CapacityFile), cp.EnforceAvailability, cp.AllowEstimatedMeasurements, cp.ExpiryHorizonHours, cp.ReservePercent, cp.MaxSnapshotAgeMinutes)
 		outf(env.Stdout, "model     %s\n", modelStatus)
 	}
 	for _, p := range problems {
@@ -601,6 +669,111 @@ func verifyModel(env Env, l *loaded) string {
 		}
 	}
 	return fmt.Sprintf("warning: pinned model %s is not listed by the models endpoint, which enumerates %s; the evaluation endpoint accepts pinned versions it does not list, so this is not proof the pin is retired", l.cfg.Analyzer.Model, strings.Join(models, ", "))
+}
+
+func runCapacity(env Env, args []string) int {
+	if len(args) == 0 || args[0] != "check" {
+		outln(env.Stderr, "usage: frost capacity check [PATH] [--json] [--config PATH]")
+		return ExitUsage
+	}
+	fs := flag.NewFlagSet("capacity check", flag.ContinueOnError)
+	fs.SetOutput(env.Stderr)
+	jsonOut := fs.Bool("json", false, "")
+	configPath := fs.String("config", "", "")
+	// Accept the snapshot path before or after the flags.
+	if err := fs.Parse(args[1:]); err != nil {
+		return ExitUsage
+	}
+	path := ""
+	if fs.NArg() > 0 {
+		path = fs.Arg(0)
+		if err := fs.Parse(fs.Args()[1:]); err != nil {
+			return ExitUsage
+		}
+		if fs.NArg() > 0 {
+			return fail(env, *jsonOut, ExitUsage, errors.New("capacity check takes at most one snapshot path"))
+		}
+	}
+	l, err := load(env, *configPath)
+	if err != nil {
+		return fail(env, *jsonOut, ExitUsage, err)
+	}
+	if path == "" {
+		path = l.cfg.CapacityFile
+	}
+	if path == "" {
+		return fail(env, *jsonOut, ExitUsage, errors.New("no snapshot: pass a path or set capacity_file in the config"))
+	}
+	now := env.Now()
+	cap, hash, err := capacity.Load(path, now)
+	if err != nil {
+		return fail(env, *jsonOut, ExitUsage, err)
+	}
+	problems := capacity.Validate(cap, l.cfg.Pools, now)
+	ok := !capacity.HasErrors(problems)
+	var ev router.CapacityEvaluation
+	if ok {
+		ev = router.EvaluatePools(&cap, l.cfg.Pools, l.cfg.Profiles, l.cfg.Policy.Capacity, now)
+	}
+	if *jsonOut {
+		out := map[string]any{
+			"schema_version": router.SchemaVersion,
+			"ok":             ok,
+			"snapshot":       path,
+			"snapshot_hash":  hash,
+			"generated_at":   cap.GeneratedAt,
+			"producer":       cap.Producer,
+			"problems":       problems,
+			"pools":          ev.Pools,
+			"profiles":       ev.Profiles,
+			"used":           ev.Used,
+			"warnings":       ev.Warnings,
+		}
+		code := writeJSON(env, out)
+		if !ok {
+			return ExitUsage
+		}
+		return code
+	}
+	outf(env.Stdout, "snapshot  %s (%s, generated %s)\n", path, cap.Producer, cap.GeneratedAt.UTC().Format(time.RFC3339))
+	for _, p := range problems {
+		outf(env.Stdout, "%s: %s\n", p.Severity, p.Message)
+	}
+	if !ok {
+		return ExitUsage
+	}
+	for _, pe := range ev.Pools {
+		age := "no observation"
+		if pe.AgeMinutes != nil {
+			age = fmt.Sprintf("observed %d minutes ago", *pe.AgeMinutes)
+		}
+		outf(env.Stdout, "pool %-16s %-10s %-9s %s; %s\n", pe.PoolID, pe.Availability, pe.Basis, age, strings.Join(pe.Reasons, "; "))
+	}
+	ids := make([]string, 0, len(ev.Profiles))
+	for id := range ev.Profiles {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		pa := ev.Profiles[id]
+		expiry := ""
+		if pa.ExpiryEligible && pa.ExpiryAt != nil {
+			expiry = "; expiry preference " + pa.ExpiryAt.UTC().Format(time.RFC3339)
+		}
+		outf(env.Stdout, "profile %-32s %-10s %s%s\n", id, pa.Availability, strings.Join(pa.Reasons, "; "), expiry)
+	}
+	for _, w := range ev.Warnings {
+		outln(env.Stdout, "warning: "+w)
+	}
+	outln(env.Stdout, "ok")
+	return ExitOK
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func runExplain(env Env, args []string) int {

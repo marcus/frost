@@ -7,6 +7,9 @@
 
 schema_version = 1
 catalog_file = "catalog.example.json"
+# Optional default usage snapshot written by an external producer (see
+# examples/capacity). A missing file is a note, not an error.
+capacity_file = "capacity.json"
 
 [analyzer]
 provider = "typesafe"
@@ -29,22 +32,55 @@ relaxed_level_reduction = 1
 # everything; level 4 admits only rank 1.
 prior_max_quality_rank_by_level = [9, 4, 3, 2, 1]
 
-# A measured adequacy rule replaces the prior for its task family and levels
-# once the catalog carries the metric. Example shape:
-# [[policy.adequacy_rules]]
-# id = "software-change-moderate"
-# task_family = "software_change"
-# reasoning_levels = [1, 2]
-# metric = "example.repo_edit.resolve_rate"
-# metric_version = "1.0"
-# minimum = 0.70
-# profile_match = "exact"
-# on_missing = "provisional_only"
+# Measured adequacy rules replace the prior for their task family and levels
+# once the catalog carries the metric (see tools/catalog-build/METRICS.md).
+# Both rules below are enabled. Their thresholds are PROVISIONAL placeholders
+# chosen so that, on the September 2026 SWE-bench Verified board, the top
+# tier passes level 3 and mid-tier models pass level 2; they are not
+# calibrated against paired outcomes. profile_match = "any" is deliberate:
+# SWE-bench harnesses are research agents, not the operator's CLI, so an
+# exact harness match would never fire. When the catalog has no matching
+# measurement for a profile, on_missing falls through to the operator prior.
+[[policy.adequacy_rules]]
+id = "swebench-software-change-l2"
+task_family = "software_change"
+reasoning_levels = [1, 2]
+metric = "swebench.verified.resolve_rate"
+metric_version = "verified-2024-08"
+minimum = 0.60
+profile_match = "any"
+on_missing = "provisional_only"
+
+[[policy.adequacy_rules]]
+id = "swebench-software-change-l3"
+task_family = "software_change"
+reasoning_levels = [3, 4]
+metric = "swebench.verified.resolve_rate"
+metric_version = "verified-2024-08"
+minimum = 0.72
+profile_match = "any"
+on_missing = "provisional_only"
 
 # Quality rank: lower is better. Cost rank: higher is cheaper.
 
+[policy.capacity]
+# Fresh, applicable, exact (or opted-in estimated) observations decide
+# availability among adequate profiles; they never move the quality floor.
+prefer_expiring_included_usage = true
+expiry_horizon_hours = 24
+reserve_percent = 5
+max_snapshot_age_minutes = 15
+# OpenCode Go only reports estimates; counting them is deliberate here so
+# DeepSeek keeps winning easy tasks. The code default is false.
+allow_estimated_measurements = true
+# true: a fresh, exhausted required pool excludes the profile; false: it is
+# demoted within its tie group. Override per call with --availability.
+enforce_availability = true
+
+
 [[profiles]]
 id = "fable"
+pool_ids = ["claude-main", "claude-fable"]
 label = "Fable"
 model = "fable"
 access_surface = "claude-code"
@@ -60,6 +96,7 @@ cost_rank = 1
 
 [[profiles]]
 id = "astra"
+pool_ids = ["codex-main"]
 label = "Astra"
 model = "astra"
 access_surface = "codex"
@@ -69,13 +106,13 @@ effort_mode = "configurable"
 effort_options = ["low", "medium", "high", "xhigh"]
 mapping_verified = false
 latency_class = "slow"
-pool_ids = ["codex-main"]
 [profiles.prior]
 quality_rank = 1
 cost_rank = 2
 
 [[profiles]]
 id = "sol"
+pool_ids = ["codex-main"]
 label = "Sol"
 model = "sol"
 access_surface = "codex"
@@ -85,13 +122,13 @@ effort_mode = "configurable"
 effort_options = ["low", "medium", "high", "xhigh"]
 mapping_verified = false
 latency_class = "medium"
-pool_ids = ["codex-main"]
 [profiles.prior]
 quality_rank = 2
 cost_rank = 4
 
 [[profiles]]
 id = "opus-5"
+pool_ids = ["claude-main"]
 label = "Opus 5"
 model = "opus-5"
 access_surface = "claude-code"
@@ -122,6 +159,7 @@ cost_rank = 7
 
 [[profiles]]
 id = "muse-1.3-spark-contributor-xhigh"
+pool_ids = ["codex-spark"]
 label = "Muse 1.3 Spark contributor"
 model = "muse-1.3-spark-contributor"
 access_surface = "codex"
@@ -137,6 +175,7 @@ cost_rank = 11
 
 [[profiles]]
 id = "deepseek-4.1-flash"
+pool_ids = ["opencode-go"]
 label = "DeepSeek 4.1 Flash"
 model = "deepseek-4.1-flash"
 access_surface = "opencode-go"
@@ -151,6 +190,7 @@ cost_rank = 12
 
 [[profiles]]
 id = "terra"
+pool_ids = ["codex-main"]
 label = "Terra"
 model = "terra"
 access_surface = "codex"
@@ -160,13 +200,13 @@ effort_mode = "configurable"
 effort_options = ["low", "medium", "high", "xhigh"]
 mapping_verified = false
 latency_class = "fast"
-pool_ids = ["codex-main"]
 [profiles.prior]
 quality_rank = 5
 cost_rank = 6
 
 [[profiles]]
 id = "sonnet-5"
+pool_ids = ["claude-main"]
 label = "Sonnet 5"
 model = "sonnet-5"
 access_surface = "claude-code"
@@ -197,6 +237,7 @@ cost_rank = 8
 
 [[profiles]]
 id = "luna"
+pool_ids = ["codex-main"]
 label = "Luna"
 model = "luna"
 access_surface = "codex"
@@ -206,13 +247,13 @@ effort_mode = "configurable"
 effort_options = ["low", "medium", "high", "xhigh"]
 mapping_verified = false
 latency_class = "extra_fast"
-pool_ids = ["codex-main"]
 [profiles.prior]
 quality_rank = 8
 cost_rank = 10
 
 [[profiles]]
 id = "haiku-4.6"
+pool_ids = ["claude-main"]
 label = "Haiku 4.6"
 model = "haiku-4.6"
 access_surface = "claude-code"
@@ -239,13 +280,58 @@ effort_mode = "none"
 mapping_verified = false
 latency_class = "extra_fast"
 
-# Quota pools are declared here and observed by an external snapshot.
-# Bindings are draft until the main Codex five-hour window is verified.
+# Quota pools are declared here and observed by an external snapshot
+# (examples/capacity/refresh.sh). The snapshot cannot add pools or windows.
+# Window IDs follow CodexBar's names; verify a binding with
+# `frost capacity check` before setting mapping_verified = true.
+
+# Codex is a flat weekly limit; CodexBar's null five-hour window is dropped.
 [[pools]]
 id = "codex-main"
 kind = "subscription"
 marginal_cost = "included"
-mapping_verified = false
+mapping_verified = true
+required_window_ids = ["secondary"]
+expiry_preference_window_ids = ["secondary"]
+non_rollover_window_ids = ["secondary"]
+
+# Claude Code: five-hour blocks under a weekly limit.
+[[pools]]
+id = "claude-main"
+kind = "subscription"
+marginal_cost = "included"
+mapping_verified = true
 required_window_ids = ["primary", "secondary"]
 expiry_preference_window_ids = ["secondary"]
 non_rollover_window_ids = ["primary", "secondary"]
+
+# Fable draws from the Claude pool and its own weekly allowance.
+[[pools]]
+id = "claude-fable"
+kind = "subscription"
+marginal_cost = "included"
+mapping_verified = true
+required_window_ids = ["claude-weekly-scoped-fable"]
+expiry_preference_window_ids = ["claude-weekly-scoped-fable"]
+non_rollover_window_ids = ["claude-weekly-scoped-fable"]
+
+# OpenCode Go reports five-hour, weekly, and monthly windows as estimates.
+[[pools]]
+id = "opencode-go"
+kind = "subscription"
+marginal_cost = "included"
+mapping_verified = true
+required_window_ids = ["primary", "secondary", "tertiary"]
+expiry_preference_window_ids = ["secondary", "tertiary"]
+non_rollover_window_ids = ["primary", "secondary", "tertiary"]
+
+# Codex Spark has separate windows; which native models draw from it is
+# unverified, so the binding stays unknown until confirmed.
+[[pools]]
+id = "codex-spark"
+kind = "subscription"
+marginal_cost = "included"
+mapping_verified = false
+required_window_ids = ["codex-spark", "codex-spark-weekly"]
+expiry_preference_window_ids = ["codex-spark-weekly"]
+non_rollover_window_ids = ["codex-spark", "codex-spark-weekly"]

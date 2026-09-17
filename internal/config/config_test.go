@@ -58,7 +58,7 @@ func TestExampleLoadsAndValidates(t *testing.T) {
 	if got := cfg.Policy.PriorMaxQualityRankByLevel; len(got) != 5 || got[0] != 9 || got[4] != 1 {
 		t.Fatalf("prior table %v", got)
 	}
-	if len(cfg.Profiles) != 13 || len(cfg.Pools) != 1 {
+	if len(cfg.Profiles) != 13 || len(cfg.Pools) != 5 {
 		t.Fatalf("profiles %d pools %d", len(cfg.Profiles), len(cfg.Pools))
 	}
 	ps := cfg.Validate(cat, families, contracts)

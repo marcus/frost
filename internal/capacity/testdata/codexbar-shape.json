@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-17T00:59:30Z",
+  "producer": "codexbar-example",
+  "pools": [
+    {
+      "id": "codex-main",
+      "source_status": "ok",
+      "measurement": "exact",
+      "observed_at": "2026-09-17T00:59:00Z",
+      "valid_until": "2026-09-17T01:14:00Z",
+      "windows": [
+        {"id": "secondary", "remaining_percent": 56, "resets_at": "2026-09-19T13:29:45Z", "duration_seconds": 604800}
+      ]
+    },
+    {
+      "id": "codex-spark",
+      "source_status": "ok",
+      "measurement": "exact",
+      "observed_at": "2026-09-17T00:59:00Z",
+      "valid_until": "2026-09-17T01:14:00Z",
+      "windows": [
+        {"id": "codex-spark", "remaining_percent": 100, "resets_at": "2026-09-17T05:59:00Z", "duration_seconds": 18000},
+        {"id": "codex-spark-weekly", "remaining_percent": 100, "resets_at": "2026-09-24T00:59:00Z", "duration_seconds": 604800}
+      ]
+    },
+    {
+      "id": "claude-main",
+      "source_status": "ok",
+      "measurement": "exact",
+      "observed_at": "2026-09-17T00:59:00Z",
+      "valid_until": "2026-09-17T01:14:00Z",
+      "windows": [
+        {"id": "primary", "remaining_percent": 39, "resets_at": "2026-09-17T05:00:00Z", "duration_seconds": 18000},
+        {"id": "secondary", "remaining_percent": 54, "resets_at": "2026-09-19T13:00:00Z", "duration_seconds": 604800}
+      ]
+    },
+    {
+      "id": "claude-fable",
+      "source_status": "ok",
+      "measurement": "exact",
+      "observed_at": "2026-09-17T00:59:00Z",
+      "valid_until": "2026-09-17T01:14:00Z",
+      "windows": [
+        {"id": "claude-weekly-scoped-fable", "remaining_percent": 39, "resets_at": "2026-09-19T13:00:00Z", "duration_seconds": 604800}
+      ]
+    },
+    {
+      "id": "opencode-go",
+      "source_status": "ok",
+      "measurement": "estimated",
+      "observed_at": "2026-09-17T00:59:00Z",
+      "valid_until": "2026-09-17T01:14:00Z",
+      "windows": [
+        {"id": "primary", "remaining_percent": 100, "resets_at": "2026-09-17T05:59:00Z", "duration_seconds": 18000},
+        {"id": "secondary", "remaining_percent": 88, "resets_at": "2026-09-20T23:59:59Z", "duration_seconds": 604800},
+        {"id": "tertiary", "remaining_percent": 60.4, "resets_at": "2026-09-21T14:30:31Z", "duration_seconds": 2592000}
+      ]
+    }
+  ]
+}

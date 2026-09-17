@@ -2,7 +2,7 @@
 type: Implementation Plan
 title: Slice 2, capacity-aware selection
 description: Neutral usage snapshots, per-profile availability, and the expiry preference for included subscription usage, built onto the slice 1 router.
-status: active
+status: implemented
 ---
 
 # Slice 2: capacity-aware selection
@@ -260,7 +260,7 @@ Every case runs `Recommend` with a fixed clock (`2026-09-17T01:00:00Z`), the sli
 | primary-full-weekly-empty | primary 100%, secondary 0%, both required | Exhausted (weekly gates). |
 | shared-pool-counted-once | Astra and Luna on `codex-main`; Astra inadequate at the level | Luna wins; Astra never appears via the pool. |
 | reset-cannot-override-quality | Cheap pool expiring tonight, cheap profile below floor | Cheap profile excluded for adequacy; expiry irrelevant. |
-| reset-cannot-override-exhausted-overlap | Profile bound to two pools; one expiring soon, other exhausted | Exhausted; no expiry preference. |
+| reset-cannot-override-exhausted-overlap | Profile bound to two pools; one expiring soon, other exhausted | Exhausted and excluded; no expiry preference. |
 | unverified-binding-ignored | Pool `mapping_verified = false` | Unknown, warning names the binding. |
 | null-primary-required | primary null, listed in `required_window_ids` | Unknown (not exhausted, not available). |
 | spark-not-main | Snapshot has pool `codex-spark` unknown to config | `capacity check` error; route with explicit `--capacity` exits 2; configured file warns and ignores. |
@@ -272,11 +272,12 @@ Every case runs `Recommend` with a fixed clock (`2026-09-17T01:00:00Z`), the sli
 | generated-at-cannot-freshen | `generated_at` now, `observed_at` 40 minutes ago | Stale. |
 | post-reset-not-refilled | `resets_at` 10 minutes before now, value 30% | Unknown; no 100% assumed. |
 | future-observed-rejected | `observed_at` one hour ahead | Parse error. |
-| tiny-task-not-upgraded | Level 0 task; expensive included profile expiring soon | Cheapest adequate still wins unless tied; expiry only breaks ties. |
+| tiny-task-not-upgraded | Level 0 task; a pool expiring tonight holds a strong profile and a cheap one | The expiring pool is favored (step 5), and the cheapest adequate profile in it wins (step 6); the strong profile is not selected merely because its pool expires. |
 | large-workload-caveat | Workload 3 with capacity used | Warning includes the reserve caveat. |
 | enforce-excludes | `enforce_availability = true`, fresh exact 0% | Excluded with reason; `available` alternative absent. |
-| enforce-off-demotes | Same with enforcement off | Winner is the available tied candidate; exhausted one listed with warning. |
+| enforce-off-demotes | Same with enforcement off (or `--availability demote`) | Winner is the available tied candidate with a reason naming the demotion. In `quality` mode an exhausted stronger profile still wins its tie group, with a warning and an `available` alternative. |
 | replay-new-snapshot | Recorded assessment, replay with `--capacity` | Decision differs only in capacity-driven fields; `capacity_hash` updated. |
+| per-call-ignore | `--availability ignore` with a snapshot | Capacity not considered; hash still recorded. |
 | deterministic | Same inputs twice | Identical JSON. |
 
 Fixture: `internal/capacity/testdata/codexbar-shape.json`, the real CodexBar-derived shape from September 16 with synthetic values (main primary null, weekly known, Spark as a separate pool, OpenCode Go three windows estimated, Antigravity two family pools, Claude source error).
@@ -300,4 +301,5 @@ Each thread lands with its tests, `make check` green, and a td log entry.
 
 ## Changelog
 
+- 2026-09-16: Implemented (td-d398e8): `internal/capacity`, router `EvaluatePools` and tie-group ordering, `[policy.capacity]`, `capacity_file`, `--capacity`, `--availability`, `frost capacity check`, the CodexBar refresh wrapper and LaunchAgent installer, and the offline matrix as tests. Live CodexBar exposed a Fable-only Claude weekly window and separate Codex Spark windows; both are declared as their own pools (`claude-fable` verified, `codex-spark` unverified). `EvaluatePools` returns a `CapacityEvaluation` (pool and profile results plus warnings) rather than only the profile map.
 - 2026-09-16: Approved with decisions recorded; implementation started.

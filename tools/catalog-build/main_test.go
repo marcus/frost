@@ -32,7 +32,7 @@ func TestRefreshFromFixturesEndToEnd(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d\n%s\n%s", code, stdout, stderr)
 	}
-	if !strings.Contains(stdout, "new catalog 2026-09-17-") || !strings.Contains(stdout, "published "+out) {
+	if !strings.Contains(stdout, "new catalog content-") || !strings.Contains(stdout, "published "+out) {
 		t.Fatalf("stdout:\n%s", stdout)
 	}
 	c, _, err := catalog.Load(out)
@@ -411,14 +411,14 @@ func TestValidateDiffAndPropose(t *testing.T) {
 	env := map[string]string{"HOME": dir}
 	exec(t, env, "refresh", "--from-fixtures", fixtures, "--out", out, "--overlay", "overlay.json")
 	code, stdout, _ := exec(t, env, "validate", out)
-	if code != exitOK || !strings.HasPrefix(stdout, "ok 2026-09-17-") {
+	if code != exitOK || !strings.HasPrefix(stdout, "ok content-") {
 		t.Fatalf("validate %d %s", code, stdout)
 	}
 	if code, _, _ := exec(t, env, "validate", "../../config/frost.example.toml"); code != exitInput {
 		t.Fatalf("validate on a non-catalog should fail")
 	}
 	code, stdout, _ = exec(t, env, "diff", "--current", "../../config/catalog.example.json", "--candidate", out)
-	if code != exitOK || !strings.Contains(stdout, "catalog example-2026-09-16 -> 2026-09-17-") {
+	if code != exitOK || !strings.Contains(stdout, "catalog example-2026-09-16 -> content-") {
 		t.Fatalf("diff %d\n%s", code, stdout)
 	}
 	code, stdout, _ = exec(t, env, "propose-aliases", "--from-fixtures", fixtures, "--overlay", "overlay.json", "--source", "models.dev,swebench", "--json")

@@ -165,14 +165,10 @@ func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overl
 	var measurements []source.Measured
 	var restricted []source.Measured
 	var latency []source.LatencyObservation
-	var digests []string
 	for _, r := range results {
 		src, _ := source.ByName(r.Name)
 		switch r.Status {
 		case "ok":
-			for _, p := range r.Payloads {
-				digests = append(digests, p.SHA256)
-			}
 			for id, f := range r.Contribution.Facts {
 				facts[id] = f
 				if len(f.EffortOptions) > 0 {
@@ -281,12 +277,19 @@ func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overl
 		}
 		return models
 	}
-	sort.Strings(digests)
-	sum := sha256.Sum256([]byte(strings.Join(digests, "\n")))
-	version := now.UTC().Format("2006-01-02") + "-" + hex.EncodeToString(sum[:])[:8]
-	a.Catalog = CatalogFile{SchemaVersion: catalog.SchemaVersion, Version: version, GeneratedAt: now.UTC(), Models: build(false)}
+	publicModels := build(false)
+	version, err := contentVersion(publicModels, "")
+	if err != nil {
+		return a, err
+	}
+	a.Catalog = CatalogFile{SchemaVersion: catalog.SchemaVersion, Version: version, GeneratedAt: now.UTC(), Models: publicModels}
 	if restrictedOut {
-		rc := CatalogFile{SchemaVersion: catalog.SchemaVersion, Version: version + "-restricted", GeneratedAt: now.UTC(), Models: build(true)}
+		restrictedModels := build(true)
+		restrictedVersion, err := contentVersion(restrictedModels, "-restricted")
+		if err != nil {
+			return a, err
+		}
+		rc := CatalogFile{SchemaVersion: catalog.SchemaVersion, Version: restrictedVersion, GeneratedAt: now.UTC(), Models: restrictedModels}
 		a.Restricted = &rc
 	}
 	a.Suggestions = suggestLatency(latency, overlay, now)
@@ -305,6 +308,19 @@ func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overl
 		}
 	}
 	return a, nil
+}
+
+func contentVersion(models []router.Model, suffix string) (string, error) {
+	content := struct {
+		SchemaVersion int            `json:"schema_version"`
+		Models        []router.Model `json:"models"`
+	}{SchemaVersion: catalog.SchemaVersion, Models: models}
+	raw, err := json.Marshal(content)
+	if err != nil {
+		return "", fmt.Errorf("encode catalog content for version: %w", err)
+	}
+	sum := sha256.Sum256(raw)
+	return "content-" + hex.EncodeToString(sum[:]) + suffix, nil
 }
 
 func applyOverride(m *router.Model, o ModelOverride) ([]string, error) {

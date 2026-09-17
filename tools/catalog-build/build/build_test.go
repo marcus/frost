@@ -90,7 +90,7 @@ func TestAssembleFromFixtures(t *testing.T) {
 	if _, err := catalog.Parse(mustJSON(asm.Catalog)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(asm.Catalog.Version, "2026-09-17-") || len(asm.Catalog.Version) != len("2026-09-17-")+8 {
+	if !strings.HasPrefix(asm.Catalog.Version, "content-") || len(asm.Catalog.Version) != len("content-")+sha256.Size*2 {
 		t.Fatalf("version %q", asm.Catalog.Version)
 	}
 	sol := modelByID(asm.Catalog, "sol")
@@ -112,6 +112,9 @@ func TestAssembleFromFixtures(t *testing.T) {
 	}
 	if aa == 0 || !strings.HasSuffix(asm.Restricted.Version, "-restricted") {
 		t.Fatalf("restricted catalog missing AA rows (%d) or version suffix %q", aa, asm.Restricted.Version)
+	}
+	if strings.TrimSuffix(asm.Restricted.Version, "-restricted") == asm.Catalog.Version {
+		t.Fatalf("restricted catalog must hash its own emitted content: public %q restricted %q", asm.Catalog.Version, asm.Restricted.Version)
 	}
 	// SWE-bench rows land on opus-5 with their effort, and haiku (no models.dev) still gets defaults.
 	opus := modelByID(asm.Catalog, "opus-5")
@@ -168,7 +171,7 @@ func TestUnchangedRefreshProducesEmptyDiffAndSameVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := Assemble(results(t, overlay, "models.dev", "swebench"), overlay, Overrides{SchemaVersion: 1}, &cur, fixedNow.Add(2*time.Hour), false)
+	second, err := Assemble(results(t, overlay, "models.dev", "swebench"), overlay, Overrides{SchemaVersion: 1}, nil, fixedNow.Add(25*time.Hour), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +184,64 @@ func TestUnchangedRefreshProducesEmptyDiffAndSameVersion(t *testing.T) {
 		Render(&buf, d)
 		t.Fatalf("expected empty diff:\n%s", buf.String())
 	}
+}
+
+func TestCatalogVersionHashesRetainedContent(t *testing.T) {
+	overlay := testOverlay(t)
+	first, err := Assemble(results(t, overlay, "models.dev", "swebench", "artificialanalysis"), overlay, Overrides{SchemaVersion: 1}, nil, fixedNow, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicA, _ := catalog.Parse(mustJSON(first.Catalog))
+	publicB, _ := catalog.Parse(mustJSON(first.Catalog))
+	alterMeasurement(t, &publicB, "opus-5", "swebench:")
+
+	currentPublic := results(t, overlay, "models.dev")
+	currentPublic = append(currentPublic, SourceResult{Name: "swebench", Status: "failed", Error: "HTTP 503"})
+	withPublicA, err := Assemble(currentPublic, overlay, Overrides{SchemaVersion: 1}, &publicA, fixedNow.Add(25*time.Hour), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withPublicB, err := Assemble(currentPublic, overlay, Overrides{SchemaVersion: 1}, &publicB, fixedNow.Add(25*time.Hour), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withPublicA.Catalog.Version == withPublicB.Catalog.Version {
+		t.Fatalf("different retained SWE-bench content shared version %q", withPublicA.Catalog.Version)
+	}
+
+	restrictedA, _ := catalog.Parse(mustJSON(*first.Restricted))
+	restrictedB, _ := catalog.Parse(mustJSON(*first.Restricted))
+	alterMeasurement(t, &restrictedB, "sol", "artificialanalysis:")
+	currentRestricted := results(t, overlay, "models.dev", "swebench")
+	currentRestricted = append(currentRestricted, SourceResult{Name: "artificialanalysis", Status: "skipped"})
+	withRestrictedA, err := AssembleWithRestrictedPrevious(currentRestricted, overlay, Overrides{SchemaVersion: 1}, &publicA, &restrictedA, fixedNow.Add(25*time.Hour), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withRestrictedB, err := AssembleWithRestrictedPrevious(currentRestricted, overlay, Overrides{SchemaVersion: 1}, &publicA, &restrictedB, fixedNow.Add(25*time.Hour), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withRestrictedA.Catalog.Version != withRestrictedB.Catalog.Version {
+		t.Fatalf("restricted-only retained content changed public version %q -> %q", withRestrictedA.Catalog.Version, withRestrictedB.Catalog.Version)
+	}
+	if withRestrictedA.Restricted.Version == withRestrictedB.Restricted.Version {
+		t.Fatalf("different retained AA content shared restricted version %q", withRestrictedA.Restricted.Version)
+	}
+}
+
+func alterMeasurement(t *testing.T, c *router.Catalog, modelID, sourcePrefix string) {
+	t.Helper()
+	m := c.Models[modelID]
+	for i := range m.Measurements {
+		if strings.HasPrefix(m.Measurements[i].Source, sourcePrefix) {
+			m.Measurements[i].Value++
+			c.Models[modelID] = m
+			return
+		}
+	}
+	t.Fatalf("model %s has no measurement from %s", modelID, sourcePrefix)
 }
 
 func TestFailedSourceRetainsPreviousData(t *testing.T) {
@@ -352,7 +413,7 @@ func TestPublishIsAtomicAndKeepsPrevious(t *testing.T) {
 		t.Fatal(err)
 	}
 	prev, err := os.ReadFile(filepath.Join(dir, "catalog.previous.json"))
-	if err != nil || !bytes.Contains(prev, []byte(`"version": "2026-09-17-`)) {
+	if err != nil || !bytes.Contains(prev, []byte(`"version": "content-`)) {
 		t.Fatalf("previous catalog missing: %v", err)
 	}
 	entries, _ := os.ReadDir(dir)

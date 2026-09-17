@@ -2,7 +2,7 @@
 
 **A model router built on [TypeSafe](https://typesafe.ai/).**
 
-Give Frost a prompt—a one-line request or a detailed task—and it recommends a model, a harness or API, and an effort level where supported. You get an explanation and alternatives, in readable text or JSON for your agents and scripts.
+Give Frost a prompt, anything from a one-line request to a full markdown doc and it recommends a model, a harness or API, and an effort level where supported. It also gives an explanation and alternatives, in readable text or JSON for your agents and scripts.
 
 Frost uses TypeSafe's Jev to assess the task, then makes the routing decision locally in Go. One analysis request on the normal path; deterministic selection after that. It recommends what to run without launching the model.
 

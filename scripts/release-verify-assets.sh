@@ -80,11 +80,13 @@ while IFS= read -r archive; do
     exit 1
   }
 
-  [[ -x $root/frost ]] || {
-    echo "$archive is missing executable frost" >&2
-    exit 1
-  }
-  for required in README.md CHANGELOG.md; do
+  for binary in frost catalog-build; do
+    [[ -x $root/$binary ]] || {
+      echo "$archive is missing executable $binary" >&2
+      exit 1
+    }
+  done
+  for required in README.md LICENSE CHANGELOG.md CONTRIBUTING.md config/frost.example.toml config/catalog.example.json config/questions-v3.json tools/catalog-build/overlay.json tools/catalog-build/NOTICES.md tools/catalog-build/licenses/models.dev-MIT.txt tools/catalog-build/licenses/swebench-CC-BY-NC-4.0.txt examples/capacity/README.md; do
     [[ -f $root/$required ]] || {
       echo "$archive is missing $required" >&2
       exit 1
@@ -92,12 +94,14 @@ while IFS= read -r archive; do
   done
 
   archive_lower=$(printf '%s' "$archive" | tr '[:upper:]' '[:lower:]')
-  if [[ -n $release_version && $archive_lower == *"_${host_os}_${host_arch}.tar.gz" ]]; then
+  if [[ $archive_lower == *"_${host_os}_${host_arch}.tar.gz" ]]; then
     output=$($root/frost version)
-    [[ $output == "frost $release_version ("* ]] || {
+    [[ -z $release_version || $output == "frost $release_version ("* ]] || {
       echo "$archive has an unexpected frost version: $output" >&2
       exit 1
     }
+    "$root/catalog-build" --help >/dev/null
+    "$root/frost" config check --config "$root/config/frost.example.toml" --json >"$temporary/config-check.json"
   fi
 done <"$temporary/archives"
 

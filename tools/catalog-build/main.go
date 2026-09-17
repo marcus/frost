@@ -53,7 +53,7 @@ Usage:
   catalog-build propose-aliases [--from-fixtures DIR] [--json]
 
 Shared flags:
-  --overlay PATH     identity table (default: overlay.json next to the binary's source, or tools/catalog-build/overlay.json)
+  --overlay PATH     identity table (default: tools/catalog-build/overlay.json, then overlay.json, relative to the working directory)
   --overrides PATH   operator overrides (default: ~/.config/frost/catalog.overrides.json when present)
   --timeout DUR      per-request timeout (default 60s)
   --json             structured result on stdout, diagnostics on stderr

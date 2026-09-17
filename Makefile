@@ -21,6 +21,7 @@ build:
 install: build
 	@mkdir -p '$(PREFIX)/bin'
 	install -m 0755 '$(BIN)/frost' '$(PREFIX)/bin/frost'
+	install -m 0755 '$(BIN)/catalog-build' '$(PREFIX)/bin/catalog-build'
 	@echo "installed frost -> $(PREFIX)/bin/frost"
 
 # install-local puts this checkout's build where the Homebrew frost lives, so
@@ -31,17 +32,18 @@ install-local: build
 	@test -n '$(BREW_PREFIX)' || { echo "Homebrew not found; use 'make install' and put $(PREFIX)/bin on PATH"; exit 1; }
 	@brew unlink frost >/dev/null 2>&1 || true
 	install -m 0755 '$(BIN)/frost' '$(BREW_PREFIX)/bin/frost'
+	install -m 0755 '$(BIN)/catalog-build' '$(BREW_PREFIX)/bin/catalog-build'
 	@echo "installed dev frost -> $(BREW_PREFIX)/bin/frost"
 	@echo "restore the release with 'make use-homebrew'"
 
 use-homebrew:
 	@test -n '$(BREW_PREFIX)' || { echo "Homebrew not found"; exit 1; }
-	rm -f '$(BREW_PREFIX)/bin/frost'
+	rm -f '$(BREW_PREFIX)/bin/frost' '$(BREW_PREFIX)/bin/catalog-build'
 	brew link --overwrite frost
 	@echo "restored the Homebrew frost"
 
 uninstall:
-	rm -f '$(PREFIX)/bin/frost'
+	rm -f '$(PREFIX)/bin/frost' '$(PREFIX)/bin/catalog-build'
 
 test:
 	$(GO) test -race -count=1 ./...

@@ -20,16 +20,31 @@ builds:
         -X github.com/marcus/frost/pkg/buildinfo.Version=v{{ .Version }}
         -X github.com/marcus/frost/pkg/buildinfo.Commit={{ .Commit }}
 
+  - id: catalog-build
+    main: ./tools/catalog-build
+    binary: catalog-build
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
 archives:
   - id: release
-    ids: [frost]
+    ids: [frost, catalog-build]
     formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     wrap_in_directory: true
     files:
       - README.md
+      - LICENSE
       - CHANGELOG.md
+      - CONTRIBUTING.md
+      - config/*
+      - tools/catalog-build/overlay.json
+      - tools/catalog-build/METRICS.md
+      - tools/catalog-build/NOTICES.md
+      - tools/catalog-build/licenses/*
+      - examples/capacity/**
 
 checksum:
   name_template: checksums.txt

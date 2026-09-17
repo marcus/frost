@@ -177,10 +177,13 @@ func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overl
 			}
 			if src != nil && src.Restricted() {
 				restricted = append(restricted, r.Contribution.Measurements...)
+				if restrictedOut {
+					latency = append(latency, r.Contribution.Latency...)
+				}
 			} else {
 				measurements = append(measurements, r.Contribution.Measurements...)
+				latency = append(latency, r.Contribution.Latency...)
 			}
-			latency = append(latency, r.Contribution.Latency...)
 			a.Unmapped = append(a.Unmapped, r.Contribution.Unmapped...)
 			a.Notes = append(a.Notes, r.Contribution.Notes...)
 		case "failed", "skipped":
@@ -292,7 +295,7 @@ func AssembleWithRestrictedPrevious(results []SourceResult, overlay source.Overl
 		rc := CatalogFile{SchemaVersion: catalog.SchemaVersion, Version: restrictedVersion, GeneratedAt: now.UTC(), Models: restrictedModels}
 		a.Restricted = &rc
 	}
-	a.Suggestions = suggestLatency(latency, overlay, now)
+	a.Suggestions = suggestLatency(latency, overlay, now, restrictedOut)
 	slices.SortFunc(a.Unmapped, func(x, y source.Unmapped) int {
 		if x.Source != y.Source {
 			return strings.Compare(x.Source, y.Source)
@@ -489,12 +492,13 @@ func LoadCurrent(path string) (*router.Catalog, error) {
 	return &c, nil
 }
 
-// LatencySuggestions is the coarse class per model derived from public
-// medians. It is a prior for the operator's profile latency_class and is
-// never written into the catalog.
+// LatencySuggestions is the coarse class per model derived from source
+// medians. Restricted source values are included only for an explicitly
+// requested restricted catalog and are never written into the catalog.
 type LatencySuggestions struct {
 	SchemaVersion int                          `json:"schema_version"`
 	GeneratedAt   time.Time                    `json:"generated_at"`
+	DataUsage     string                       `json:"data_usage"`
 	Basis         string                       `json:"basis"`
 	Suggestions   map[string]LatencySuggestion `json:"suggestions"`
 }
@@ -527,8 +531,14 @@ func ClassFor(ttft, tps float64) string {
 	return "slow"
 }
 
-func suggestLatency(obs []source.LatencyObservation, overlay source.Overlay, now time.Time) LatencySuggestions {
-	s := LatencySuggestions{SchemaVersion: 1, GeneratedAt: now.UTC(), Basis: "prior derived from public medians; verify against measured end-to-end latency", Suggestions: map[string]LatencySuggestion{}}
+func suggestLatency(obs []source.LatencyObservation, overlay source.Overlay, now time.Time, restrictedOut bool) LatencySuggestions {
+	dataUsage := "public"
+	basis := "no public latency observations available; classes are unknown"
+	if restrictedOut {
+		dataUsage = "restricted_local_only"
+		basis = "restricted local prior derived from Artificial Analysis medians; do not redistribute; verify against measured end-to-end latency"
+	}
+	s := LatencySuggestions{SchemaVersion: 1, GeneratedAt: now.UTC(), DataUsage: dataUsage, Basis: basis, Suggestions: map[string]LatencySuggestion{}}
 	for id, om := range overlay.Models {
 		s.Suggestions[id] = LatencySuggestion{Class: "unknown"}
 		// The first listed AA slug is the model's primary variant.

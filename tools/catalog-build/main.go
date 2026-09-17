@@ -230,7 +230,11 @@ type outputPath struct {
 // validateOutputPaths resolves lexical aliases, symlinked parents, symlinked
 // files, and existing hard links before refresh can mutate any destination.
 func validateOutputPaths(out, restricted string) (string, error) {
-	suggestions := filepath.Join(filepath.Dir(out), "latency.suggestions.json")
+	suggestionsBase := out
+	if restricted != "" {
+		suggestionsBase = restricted
+	}
+	suggestions := filepath.Join(filepath.Dir(suggestionsBase), "latency.suggestions.json")
 	outputs := []outputPath{
 		{label: "--out", path: out},
 		{label: "--out backup", path: build.PreviousPath(out)},

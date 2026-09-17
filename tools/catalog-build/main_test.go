@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,8 +26,8 @@ func exec(t *testing.T, env map[string]string, args ...string) (int, string, str
 
 func TestRefreshFromFixturesEndToEnd(t *testing.T) {
 	dir := t.TempDir()
-	out := filepath.Join(dir, "catalog.json")
-	restricted := filepath.Join(dir, "catalog.local.json")
+	out := filepath.Join(dir, "public", "catalog.json")
+	restricted := filepath.Join(dir, "restricted", "catalog.local.json")
 	env := map[string]string{"HOME": dir}
 	code, stdout, stderr := exec(t, env, "refresh", "--from-fixtures", fixtures, "--out", out, "--restricted-out", restricted, "--overlay", "overlay.json")
 	if code != exitOK {
@@ -74,8 +75,23 @@ func TestRefreshFromFixturesEndToEnd(t *testing.T) {
 	if aa == 0 {
 		t.Fatalf("restricted catalog has no AA rows")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "latency.suggestions.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "public", "latency.suggestions.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("public artifact set contains restricted latency suggestions: %v", err)
+	}
+	suggestionsPath := filepath.Join(dir, "restricted", "latency.suggestions.json")
+	if _, err := os.Stat(suggestionsPath); err != nil {
 		t.Fatalf("latency suggestions missing: %v", err)
+	}
+	var suggestions build.LatencySuggestions
+	raw, err := os.ReadFile(suggestionsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &suggestions); err != nil {
+		t.Fatal(err)
+	}
+	if suggestions.DataUsage != "restricted_local_only" || !strings.Contains(suggestions.Basis, "restricted local") {
+		t.Fatalf("latency suggestions are not explicitly restricted: %+v", suggestions)
 	}
 	// Golden comparison of the distributable catalog, ignoring generated_at.
 	golden, err := os.ReadFile("testdata/golden/catalog.json")
@@ -199,6 +215,19 @@ func TestAAWithoutKeyIsSkippedAndNeverWrittenToOut(t *testing.T) {
 			}
 		}
 	}
+	raw, err := os.ReadFile(filepath.Join(dir, "latency.suggestions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var suggestions build.LatencySuggestions
+	if err := json.Unmarshal(raw, &suggestions); err != nil {
+		t.Fatal(err)
+	}
+	for id, suggestion := range suggestions.Suggestions {
+		if suggestion.Class != "unknown" || suggestion.TTFTSec != nil || suggestion.TokPerSec != nil || suggestion.SourceID != "" || suggestion.Source != "" || len(suggestion.ByEffort) != 0 {
+			t.Fatalf("public suggestion %s contains restricted AA data: %+v", id, suggestion)
+		}
+	}
 }
 
 func TestRefreshRetainsRestrictedAAWhenSkipped(t *testing.T) {
@@ -313,9 +342,9 @@ func TestRefreshRejectsEquivalentOutputPaths(t *testing.T) {
 	}
 
 	out := filepath.Join(dir, "distinct", "catalog.json")
-	restricted := filepath.Join(dir, "distinct", "catalog.local.json")
+	restricted := filepath.Join(dir, "local", "catalog.local.json")
 	suggestions, err := validateOutputPaths(out, restricted)
-	if err != nil || suggestions != filepath.Join(dir, "distinct", "latency.suggestions.json") {
+	if err != nil || suggestions != filepath.Join(dir, "local", "latency.suggestions.json") {
 		t.Fatalf("distinct paths: suggestions=%q err=%v", suggestions, err)
 	}
 }

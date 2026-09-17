@@ -148,6 +148,9 @@ func TestAssembleFromFixtures(t *testing.T) {
 	if asm.Suggestions.Suggestions["haiku"].Class != "unknown" || asm.Suggestions.Suggestions["opus-5"].Class != "fast" {
 		t.Fatalf("suggestions %+v", asm.Suggestions.Suggestions)
 	}
+	if asm.Suggestions.DataUsage != "restricted_local_only" || !strings.Contains(asm.Suggestions.Basis, "restricted local") {
+		t.Fatalf("restricted suggestions labeling: %+v", asm.Suggestions)
+	}
 	if len(asm.EffortOptions["sol"]) == 0 {
 		t.Fatalf("effort options should be surfaced")
 	}
@@ -158,6 +161,22 @@ func TestAssembleFromFixtures(t *testing.T) {
 	}
 	if !ids["models.dev/anthropic/claude-fable-5"] || !ids["swebench/gpt-5-2-codex"] || !ids["artificialanalysis/synthetic-unmapped"] {
 		t.Fatalf("unmapped %+v", asm.Unmapped)
+	}
+}
+
+func TestPublicAssemblyExcludesRestrictedLatencySuggestions(t *testing.T) {
+	overlay := testOverlay(t)
+	asm, err := Assemble(results(t, overlay, "models.dev", "swebench", "artificialanalysis"), overlay, Overrides{SchemaVersion: 1}, nil, fixedNow, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asm.Suggestions.DataUsage != "public" || strings.Contains(asm.Suggestions.Basis, "public medians") {
+		t.Fatalf("public suggestions labeling: %+v", asm.Suggestions)
+	}
+	for id, suggestion := range asm.Suggestions.Suggestions {
+		if suggestion.Class != "unknown" || suggestion.TTFTSec != nil || suggestion.TokPerSec != nil || suggestion.SourceID != "" || suggestion.Source != "" || len(suggestion.ByEffort) != 0 {
+			t.Fatalf("public suggestion %s contains restricted latency data: %+v", id, suggestion)
+		}
 	}
 }
 

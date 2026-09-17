@@ -1,6 +1,8 @@
 package build
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,7 +64,12 @@ func LoadPayloads(dir, sourceName string) ([]source.Payload, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, source.Payload{Source: sourceName, Name: row.Name, URL: row.URL, FetchedAt: row.FetchedAt, SHA256: row.SHA256, Body: body})
+		sum := sha256.Sum256(body)
+		actual := hex.EncodeToString(sum[:])
+		if actual != row.SHA256 {
+			return nil, fmt.Errorf("%s/%s: sha256 mismatch: meta has %q, payload is %q", sourceName, row.Name, row.SHA256, actual)
+		}
+		out = append(out, source.Payload{Source: sourceName, Name: row.Name, URL: row.URL, FetchedAt: row.FetchedAt, SHA256: actual, Body: body})
 	}
 	return out, nil
 }

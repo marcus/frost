@@ -2,7 +2,9 @@ package build
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -394,12 +396,14 @@ func TestClassFor(t *testing.T) {
 
 func TestRecordAndLoadPayloadsRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	in := []source.Payload{{Source: "swebench", Name: "leaderboards.json", URL: "u", FetchedAt: fixedNow, SHA256: "abc", Body: []byte(`{"leaderboards":[]}`)}}
+	body := []byte(`{"leaderboards":[]}`)
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
+	in := []source.Payload{{Source: "swebench", Name: "leaderboards.json", URL: "u", FetchedAt: fixedNow, SHA256: digest, Body: body}}
 	if err := RecordPayloads(dir, in); err != nil {
 		t.Fatal(err)
 	}
 	out, err := LoadPayloads(dir, "swebench")
-	if err != nil || len(out) != 1 || string(out[0].Body) != `{"leaderboards":[]}` || out[0].SHA256 != "abc" || !out[0].FetchedAt.Equal(fixedNow) {
+	if err != nil || len(out) != 1 || string(out[0].Body) != `{"leaderboards":[]}` || out[0].SHA256 != digest || !out[0].FetchedAt.Equal(fixedNow) {
 		t.Fatalf("round trip %+v %v", out, err)
 	}
 	if _, err := LoadPayloads(dir, "models.dev"); !os.IsNotExist(err) {
@@ -409,5 +413,21 @@ func TestRecordAndLoadPayloadsRoundTrip(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(dir, "swebench", "meta.json"))
 	if err := json.Unmarshal(raw, &meta); err != nil || meta["source"] != "swebench" {
 		t.Fatalf("meta %v %v", meta, err)
+	}
+}
+
+func TestLoadPayloadsRejectsTamperedFixture(t *testing.T) {
+	dir := t.TempDir()
+	body := []byte(`{"leaderboards":[]}`)
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
+	payload := source.Payload{Source: "swebench", Name: "leaderboards.json", URL: "u", FetchedAt: fixedNow, SHA256: digest, Body: body}
+	if err := RecordPayloads(dir, []source.Payload{payload}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "swebench", "leaderboards.json"), []byte(`{"leaderboards":[{"tampered":true}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadPayloads(dir, "swebench"); err == nil || !strings.Contains(err.Error(), "swebench/leaderboards.json: sha256 mismatch") || !strings.Contains(err.Error(), digest) {
+		t.Fatalf("tampered fixture error = %v", err)
 	}
 }

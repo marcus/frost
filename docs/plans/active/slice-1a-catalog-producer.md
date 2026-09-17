@@ -2,12 +2,12 @@
 type: Implementation Plan
 title: Slice 1a, public catalog producer
 description: An external Go command that fetches permitted public sources, normalizes them into Frost's neutral catalog with provenance, and publishes it atomically with a reviewable diff.
-status: draft
+status: active
 ---
 
 # Slice 1a: public catalog producer
 
-td: `td-b850c7`. This plan supports the [controlling router plan](../active/model-router.md), the [catalog and evidence specification](../active/catalog-and-profile-evidence.md), and the [public-source research brief](../../research/model-data-sources.md). Read those first; this document decides how the producer is built. Decisions marked **settled** are ready to implement. Items under *Open questions* need Marcus.
+td: `td-b850c7`. This plan supports the [controlling router plan](../active/model-router.md), the [catalog and evidence specification](../active/catalog-and-profile-evidence.md), and the [public-source research brief](../../research/model-data-sources.md). Read those first; this document decides how the producer is built. Decisions marked **settled** are ready to implement. The open questions were answered on September 16, 2026; the answers are folded into the decisions below.
 
 ## Outcome
 
@@ -29,6 +29,7 @@ Nothing here changes the router's selection policy. Adding a source changes a co
 | Output | The existing catalog contract (`internal/catalog`, schema_version 1). No schema change is required for the first thread; measurement records use the existing fields. |
 | Publication | Write to a temp file in the destination directory, validate with `catalog.Parse`, then rename. The previous file becomes `catalog.previous.json` until the next successful publish. |
 | Restricted data | AA-derived measurements are written only to a catalog path the operator names with `--restricted-out`, listed in `.gitignore` guidance, and never to a distributable fixture. |
+| Operator overrides | `~/.config/frost/catalog.overrides.json` (flag `--overrides`) is applied as the last normalization step on every publish, so a hand-tweaked field, an added or removed measurement, or a pinned value survives every refresh. The diff labels overridden fields. |
 | No scheduler | Refresh is manual (`catalog-build refresh`). A user-owned cron or launchd job can call it later; this plan installs nothing. |
 
 ## Command
@@ -90,7 +91,7 @@ Only the Verified board is imported in slice 1a. Lite, Test, Multimodal, and Mul
 
 | Item | Value |
 | --- | --- |
-| Endpoint | `GET https://artificialanalysis.ai/api/v2/language/models/free` with header `x-api-key` from `AA_API_KEY`. Free tier: 100 requests per 24 h, internal use with attribution, no redistribution. The exact response shape was not exercised in research; the connector is written against a recorded payload the operator captures with `fetch --record` on first use. |
+| Endpoint | `GET https://artificialanalysis.ai/api/v2/language/models/free` with header `x-api-key` from `ARTIFICIAL_ANALYSIS_API_KEY`. Free tier: 100 requests per 24 h, internal use with attribution, no redistribution. The exact response shape was not exercised in research; the connector is written against a recorded payload the operator captures with `fetch --record` on first use. |
 | Fields used | `id`, `slug`, `name`, headline indices (intelligence, coding, agentic) with `intelligence_index_version`, median output speed, median TTFT, input and output prices. |
 | Maps to | Measurements with metrics `aa.intelligence_index`, `aa.coding_index`, `aa.agentic_index` (unit `index`, `metric_version` from the API's major.minor plus the methodology URL in `source`), `aa.output_tokens_per_second`, `aa.ttft_seconds_median`, `price.input_usd_per_mtok` / `price.output_usd_per_mtok` with `provider` `artificialanalysis-median`. Task family empty: AA indices are not task-family evidence in slice 1a. |
 | Refresh cadence | Daily at most, well under the request budget. |
@@ -148,7 +149,7 @@ Catalog `version` is `<date>-<short digest of concatenated payload digests>`; `g
 
 ## First adequacy rules
 
-The evidence above enables one rule set, shipped commented out in `config/frost.example.toml` and enabled by the operator once their profiles carry `harness` and `effort` values that match SWE-bench rows:
+The evidence above enables one rule set, shipped enabled in `config/frost.example.toml` because the alternative floor is an unmeasured impression; an operator can loosen or disable it locally:
 
 ```toml
 [[policy.adequacy_rules]]
@@ -216,13 +217,15 @@ Acceptance cases from the controlling plan, each an offline test:
 3. **Thread 3: optional enrichment.** AA connector with `--restricted-out`, latency suggestions file, config-check warning. Evidence: synthetic AA fixture test; live run only after Marcus supplies a key and tier.
 4. Update `docs/plans/README.md`, the Fractal model (`catalog-build` moves from proposed to current), and this plan's status to implemented.
 
-## Open questions for Marcus
+## Decisions from review
 
-1. **Artificial Analysis**: do you want a key on the Free tier (internal use, no redistribution) for thread 3, or skip AA until a routing decision needs it?
-2. **OpenRouter**: no profile uses it today. Keep deferred unless you plan to route through OpenRouter.
-3. **Committing fixtures**: trimmed models.dev and SWE-bench payloads in `testdata/` make CI offline and reproducible; confirm you are comfortable committing those public payloads (about 100 KB after trimming).
-4. **Rule thresholds**: 0.60 and 0.72 are placeholders. If you would rather ship no enabled rule until paired outcomes exist, thread 2 still lands the connector and leaves both rules commented out.
+- Artificial Analysis: the key is `ARTIFICIAL_ANALYSIS_API_KEY` in the operator's environment; thread 3 proceeds.
+- OpenRouter stays deferred.
+- Trimmed public fixtures from models.dev and SWE-bench are committed under `testdata/`.
+- The two SWE-bench rules ship enabled; thresholds remain labeled provisional.
+- Source-derived values must be overridable locally without being clobbered by a refresh (the overrides file above).
 
 ## Changelog
 
+- 2026-09-16: Approved with decisions recorded; implementation started.
 - 2026-09-16: Drafted after slice 1 landed; source facts re-verified against live models.dev and SWE-bench payloads on this date.

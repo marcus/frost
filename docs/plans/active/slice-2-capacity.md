@@ -2,12 +2,12 @@
 type: Implementation Plan
 title: Slice 2, capacity-aware selection
 description: Neutral usage snapshots, per-profile availability, and the expiry preference for included subscription usage, built onto the slice 1 router.
-status: draft
+status: active
 ---
 
 # Slice 2: capacity-aware selection
 
-This plan supports the controlling [model-router plan](../active/model-router.md), sections "Capacity input" and "Choosing with subscription capacity". It turns those contracts into concrete packages, types, policy fields, tests, and a work sequence against the code as it stands after slice 1. Track it as td-d398e8. It moves to `active/` when Marcus approves it.
+This plan supports the controlling [model-router plan](../active/model-router.md), sections "Capacity input" and "Choosing with subscription capacity". It turns those contracts into concrete packages, types, policy fields, tests, and a work sequence against the code as it stands after slice 1. Track it as td-d398e8. Approved September 16, 2026 with the decisions recorded at the end.
 
 Outcome: `frost route --capacity snapshot.json` (or a configured `capacity_file`) makes a fresh, applicable, exact observation of remaining subscription usage affect the choice among profiles that are already adequate, never the quality floor. Absent, stale, estimated, or unknown observations are visible in the result and change nothing unless the operator opts in.
 
@@ -16,12 +16,12 @@ Outcome: `frost route --capacity snapshot.json` (or a configured `capacity_file`
 | Decision | Choice |
 | --- | --- |
 | Where capacity enters `Recommend` | Two points only: an availability gate after adequacy (step 3 of the controlling order) and an expiry preference inside the objective tie group (step 5). Cost and stable ID remain last. |
-| Default enforcement | `enforce_availability = false`: an exhausted pool warns and demotes within its tie group; it does not exclude. Exclusion is an explicit policy choice. This is softer than step 3 of the controlling plan, which excludes a fresh, exact, exhausted required pool; the softer default follows the "provisional over refusal" stance adopted for slice 1 and is open question 3 below. Whichever answer Marcus gives, the controlling plan's step 3 is updated to match when this plan moves to `active/`. |
-| Which measurements count | `exact` by default; `estimated` only with `allow_estimated_measurements = true`, and every use of an estimated value is labeled. `unknown` never counts. |
+| Default enforcement | `enforce_availability = true`: a fresh, exact (or opted-in estimated), exhausted required pool excludes the candidate, matching step 3 of the controlling plan. `false` demotes within the tie group instead. A per-call override `frost route --availability exclude\|demote\|ignore` exists because the right behavior depends on timing: a live request wants exclusion, a plan running across a reset seam may prefer demotion. |
+| Which measurements count | `exact` always; `estimated` when `allow_estimated_measurements = true`, and every use of an estimated value is labeled. The code default is false; the example and Marcus's config set it true so OpenCode Go (estimated) counts and DeepSeek keeps winning easy tasks. `unknown` never counts. |
 | Which windows drive expiry preference | Only the pool's `expiry_preference_window_ids` (weekly or monthly allowances by operator declaration). Five-hour windows gate headroom but never earn the preference. |
 | Headroom rule | Every window in `required_window_ids` must be known and above `reserve_percent`. One unknown required window makes the pool unknown. |
 | Snapshot authority | The snapshot supplies observations keyed by pool and window IDs the operator config already declares. Unknown IDs are errors when a snapshot is supplied explicitly. It cannot add pools, windows, or bindings. |
-| Frost never runs a producer | `frost` reads a file. The CodexBar wrapper is an example script the operator runs or schedules. |
+| Frost never runs a producer | `frost` reads a file. The CodexBar wrapper is an example script; `examples/capacity/install-launchd.sh` schedules it every five minutes as a user LaunchAgent, because problems with bindings show up fastest in real use. |
 | Time source | `Inputs.Now` already exists; all freshness and reset comparisons use it, so tests pin the clock. |
 
 ## Snapshot contract: `internal/capacity`
@@ -236,15 +236,15 @@ Behavior: `set -euo pipefail`; runs `codexbar usage --json` per provider with `-
 
 The bindings file stays the operator's document. The example continues to omit Spark and Claude.
 
-Before any binding is marked `mapping_verified = true` in the operator config:
+Pool topology settled from Marcus's account facts and the September 16 CodexBar output:
 
-| Binding | Open question |
-| --- | --- |
-| `codex-main` primary (five-hour) | CodexBar returned null for the main five-hour window on September 16. Does the plan have one, and does CodexBar expose it? Until answered, `required_window_ids = ["secondary"]` only, and the plan's null-primary rule keeps the pool unknown if primary is listed as required. |
-| `codex-main` vs Spark | Which native model IDs draw from Spark's separate windows? Muse 1.3 Spark contributor is bound to `codex-main` in the example; that is unverified. |
-| Antigravity families | Gemini and Claude/GPT windows are separate pools; bind `gemini-3.8-high` to the Gemini pool only after confirming the window IDs in current output. |
-| Claude OAuth | Expired token on September 16. Until it collects, Claude Code profiles have no pool and stay `unknown`; that is correct and must not read as unavailable. |
-| OpenCode Go | Measurements are `estimated`. They count only with the opt-in; decide whether Marcus wants that. |
+| Pool | Windows | Required | Expiry preference | Notes |
+| --- | --- | --- | --- | --- |
+| `codex-main` | `secondary` (weekly) | `secondary` | `secondary` | Codex is a flat weekly limit; there is no five-hour window, so `primary` is not declared and a null primary from CodexBar is dropped. |
+| `claude-main` | `primary` (five-hour), `secondary` (weekly) | both | `secondary` | Claude Code has five-hour blocks under a weekly limit. CodexBar's Claude source returned usage on September 16 after the earlier token expiry. |
+| `opencode-go` | `primary`, `secondary`, `tertiary` (monthly) | all three | `secondary`, `tertiary` | Measurements are estimated; counted through the opt-in. |
+
+Spark, Antigravity, and Grok pools wait for verified window IDs. Bindings: Codex-surface profiles to `codex-main`, Claude Code profiles to `claude-main`, DeepSeek to `opencode-go`; `mapping_verified = true` for these three after the first live snapshot passes `frost capacity check`.
 
 ## Offline acceptance matrix
 
@@ -291,9 +291,13 @@ Each thread lands with its tests, `make check` green, and a td log entry.
 4. **Producer wrapper.** `examples/capacity/refresh.sh`, README rewrite, dry-run test with a recorded CodexBar JSON fixture (synthetic values). Evidence: wrapper output passes `capacity check` against the example config with the pools Marcus verifies.
 5. **Plan and docs.** Move this plan to `implemented/`, update the controlling plan's slice table, README usage, Fractal model (`frost.capacity` from proposed to current), CHANGELOG.
 
-## Open questions for Marcus
+## Decisions from review
 
-1. Which providers' pools should be bound and verified first? The example config declares only `codex-main`; the wrapper can emit Spark, OpenCode Go, and Antigravity pools once their window IDs are confirmed.
-2. Should estimated measurements (OpenCode Go today) count with the opt-in from the start, given DeepSeek is the cheapest adequate profile for most easy tasks?
-3. Is enforcement off the right long-term default, or should an exact, fresh 0% exclude once the bindings are verified?
-4. Should `refresh.sh` be scheduled (launchd or cron) now, or run manually until the bindings are trusted?
+1. Bind and verify `codex-main` and `claude-main` first, with `opencode-go` alongside because its estimated measurements count.
+2. Estimated measurements count via the opt-in from the start.
+3. Enforcement is configurable, defaults to exclude, and can be overridden per call.
+4. The refresh script is scheduled now via a LaunchAgent; trust comes from real use.
+
+## Changelog
+
+- 2026-09-16: Approved with decisions recorded; implementation started.

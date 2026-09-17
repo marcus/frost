@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.0] - 2026-09-16
 
 - Distribution: MIT license for Frost code, separate source-data notices, contributor guidance, and both `frost` and `catalog-build` in local installs, release archives, and the Homebrew formula. Archives include configuration and producer assets and are smoke-tested before release.
 - `frost config check` reports advisory, effort-aware warnings when a profile's latency class is more than one tier faster than the producer suggestion. Missing suggestion files remain optional.

@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Frost" width="280">
+</p>
+
 # Frost
 
-**A model router built on [TypeSafe](https://typesafe.ai/).**
+**A model router built on [TypeSafe](https://typesafe.ai/).** A [Haplab](https://haplab.com) project.
 
 Give Frost a prompt, anything from a one-line request to a full markdown doc and it recommends a model, a harness or API, and an effort level where supported. It also gives an explanation and alternatives, in readable text or JSON for your agents and scripts.
 

@@ -25,7 +25,7 @@ catalog-build refresh --out ~/.config/frost/catalog.json \
   --restricted-out ~/.config/frost/catalog.local.json
 ```
 
-Run those commands from the source checkout, or pass `--overlay /absolute/path/to/tools/catalog-build/overlay.json`. `make install` installs the two executables but leaves source assets in the checkout. Release archives include the overlay, metrics registry, notices, configuration, and capacity example. A future Homebrew package will place them under `$(brew --prefix frost)/share/frost/`; no Homebrew release is published yet.
+Run those commands from the source checkout, or pass `--overlay /absolute/path/to/tools/catalog-build/overlay.json`. `make install` installs the two executables but leaves source assets in the checkout. Release archives include the overlay, metrics registry, notices, configuration, and capacity example. The Homebrew package places them under `$(brew --prefix frost)/share/frost/`.
 
 Local changes that must survive a refresh go in `~/.config/frost/catalog.overrides.json` or the path passed to `--overrides`. Per-model `set`, `add_measurements`, and `remove_measurements` operations are applied last and labeled in the diff. A successful publish validates and atomically replaces the destination, keeps the prior file as `catalog.previous.json`, and writes `latency.suggestions.json` beside the restricted catalog when `--restricted-out` is set, or beside the public catalog otherwise.
 

@@ -2,6 +2,10 @@
 
 Frost reads one neutral usage snapshot and never runs a producer. This directory is an example producer for [CodexBar](https://github.com/steipete/CodexBar) 0.60.2 that writes the snapshot Frost's `capacity_file` points at. Any script, usage tool, or hand-edited file that emits the same shape works too; the contract is in the [slice 2 plan](../../docs/plans/implemented/slice-2-capacity.md).
 
+## Requirements
+
+Install CodexBar and `jq` and ensure both are on `PATH` before running the wrapper. Configure the provider access CodexBar needs and edit the bindings for your accounts.
+
 ## Files
 
 - `codexbar-to-frost.jq`: converts CodexBar `usage --json` rows into the snapshot. Account emails, credit inventory, tokens, and raw error bodies are dropped.

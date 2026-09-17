@@ -1,98 +1,142 @@
 # Frost
 
-Frost recommends a model and execution profile for a task written in ordinary language. Give it the task you would give an agent, in a sentence or several pages, and it returns a model, an access surface (a CLI harness or an API), an effort intent when the profile supports one, a short explanation, and useful alternatives. An agent consumes the same result as JSON. Asking for a recommendation never launches a model, changes a project, or grants execution permissions.
+**A model router built on [TypeSafe](https://typesafe.ai/).**
 
-**Status: slices 1, 1a, and 2 are implemented.** Task analysis runs through TypeSafe; selection is a deterministic policy over operator-configured profiles, source-attributed catalog evidence, and an optional neutral capacity snapshot. The separate `catalog-build` command refreshes model facts and benchmark observations, while `frost` remains offline except for the configured task analyzer. Results remain `provisional`: the September 2026 SWE-bench source has no applicable rows for the current configured models, the latency classes are unmeasured priors, and paired completion outcomes have not been collected. Read the [implementation plan](docs/plans/active/model-router.md) for the design and the [pilot findings](docs/research/router-pilot.md) for the evidence behind it.
+Give Frost a prompt—a one-line request or a detailed task—and it recommends a model, a harness or API, and an effort level where supported. You get an explanation and alternatives, in readable text or JSON for your agents and scripts.
 
-## Install and configure
+Frost uses TypeSafe's Jev to assess the task, then makes the routing decision locally in Go. One analysis request on the normal path; deterministic selection after that. It recommends what to run without launching the model.
 
-Requirements: Go 1.27 and a TypeSafe API key exported as `TYPESAFE_API_KEY`.
+- **Spend according to the task.** The default policy chooses the cheapest configured profile that meets the quality floor. Prefer quality or speed when the task calls for it.
+- **Bring your own models.** Configure the models, harnesses, APIs, and effort settings you can actually use. Refresh model data from online sources or supply your own catalog.
+- **Use your subscriptions.** Optional [CodexBar integration](examples/capacity/README.md) lets recommendations account for Claude, Codex, and other subscription limits you've connected.
+- **Inspect every decision.** Structured results expose the analysis, constraints, evidence, and uncertainty. Record a decision and replay it offline against a different policy.
+
+## Quick start
+
+Install on macOS or Linux with Homebrew:
 
 ```sh
-make build                      # bin/frost and bin/catalog-build
-make install                    # ~/.local/bin/frost and ~/.local/bin/catalog-build
-mkdir -p ~/.config/frost
-cp config/frost.example.toml ~/.config/frost/config.toml
-cp config/catalog.example.json config/questions-v3.json ~/.config/frost/
-frost config check              # validates config, catalog, and question spec
+brew install marcus/tap/frost
 ```
 
-Frost resolves its operator config from `--config`, then `FROST_CONFIG`, then `~/.config/frost/config.toml`. That file references the catalog, question spec, and optional capacity snapshot. The [config README](config/README.md) explains what each example encodes; the example rankings and latency classes are operator priors kept for reproducibility and contain no measured performance.
-
-## Use
+Both `frost` and `catalog-build` are included. Copy the starter configuration:
 
 ```sh
+frost_assets="$(brew --prefix frost)/share/frost"
+mkdir -p ~/.config/frost
+cp "$frost_assets/config/frost.example.toml" ~/.config/frost/config.toml
+cp "$frost_assets/config/catalog.example.json" "$frost_assets/config/questions-v3.json" ~/.config/frost/
+```
+
+Set `TYPESAFE_API_KEY` in your environment with your [TypeSafe](https://typesafe.ai/) API key. Edit `~/.config/frost/config.toml` to match your model access, then check it and route a task:
+
+```sh
+frost config check
 frost route "Find why our retries sometimes duplicate a payment."
 frost route --file task.md --json
+```
+
+The starter profiles and rankings are examples, not a promise that every listed model is available to your account. See the [configuration guide](config/README.md) for profiles, catalogs, effort mappings, and capacity settings. A missing optional capacity snapshot is reported but doesn't block routing.
+
+Prebuilt macOS and Linux archives are also available on the [releases page](https://github.com/marcus/frost/releases). They include both executables and the configuration assets. To build from source, see [Development](#development).
+
+## Choose a policy
+
+```sh
+# Default: choose the cheapest adequate profile.
+frost route "Fix the typo in the navigation label."
+
+# Prefer quality or speed among adequate candidates.
+frost route --policy quality "Prove this lock-free queue is linearizable."
+frost route --policy fast "Summarize this incident report."
+
+# Restrict the candidate profiles or request an effort level.
+frost route --allow sol,astra --effort high --file task.md
+
+# Read from a pipeline or a structured request.
 frost route --stdin --json < task.md
 frost route --request request.json --json
-frost route --policy quality "Prove this lock-free queue is linearizable."
-frost route --allow sol,astra --effort high "…"
-frost route --latency-ms 2000 --latency-mode prefer "…"
-frost route --capacity ~/.config/frost/capacity.json --availability exclude "…"
+
 frost profiles list --json
-frost config check --json --verify-model
-frost capacity check ~/.config/frost/capacity.json --json
-frost explain saved-decision.json
+frost route --help
 ```
 
-Each live `route` makes one TypeSafe request. Policy modes are `adequate` (default: the cheapest profile meeting the floor), `quality`, `fast`, and `relaxed` (an explicitly lowered floor). Explicit flags override a `--request` object, which overrides the config. Exit codes: 0 for a recommendation or provisional result, 2 for input or config errors, 3 for `needs_context`, `no_match`, or `conflict`, 4 for analyzer failures. JSON mode writes one result or error object to stdout and diagnostics to stderr.
+Policies are `adequate`, `quality`, `fast`, and `relaxed`. The last explicitly lowers the quality floor. Flags override the request object, which overrides configuration. Frost resolves configuration from `--config`, then `FROST_CONFIG`, then `~/.config/frost/config.toml`.
 
-## Refresh the catalog
+JSON mode writes one result or error object to stdout and diagnostics to stderr. Exit codes are `0` for a recommendation or provisional result, `2` for input/configuration errors, `3` for missing context, no match, or conflicting constraints, and `4` for analyzer failures.
 
-`catalog-build` is a separate producer. It imports model identity, capabilities, context limits, and prices from models.dev; SWE-bench Verified measurements where an explicitly reviewed identity mapping exists; and optional Artificial Analysis data into a restricted local catalog when `ARTIFICIAL_ANALYSIS_API_KEY` is set. It prints a reviewable diff and atomically publishes the new catalog while retaining `catalog.previous.json`. A failed or skipped Artificial Analysis refresh retains last-good measurements in the restricted catalog and last-good AA-derived suggestions beside it, then reports a partial exit; public, restricted, and latency output paths must be distinct.
+## Speed and cost
+
+Routing adds one small TypeSafe analysis request on the normal path, followed by local selection; transient failures can trigger retries. The [recorded pilot](docs/research/router-pilot.md) measured mean analysis times of 104–145 ms across three small runs, including HTTP, decoding, and validation. Those measurements exclude process startup and record-file synchronization and are not an end-to-end latency guarantee.
+
+TypeSafe [lists Jev at $0.042 per million input tokens, with free output](https://typesafe.ai/blog/introducing-system-one-models-and-jev). At that price, a 2,000-input-token analysis costs about $0.000084. This is a list-price estimate for analysis only, not measured account billing or the cost of running the recommended model.
+
+## Refresh model data—or bring your own
+
+The separate `catalog-build` command refreshes model facts and prices from models.dev, plus SWE-bench Verified measurements where reviewed model mappings exist. Catalog updates happen when you run the producer; routing reads the local catalog without fetching those sources again.
 
 ```sh
-# Reproduce the checked-in source fixtures without network access.
-catalog-build refresh --from-fixtures tools/catalog-build/testdata/2026-09-16 \
-  --out /tmp/frost-catalog.json
-catalog-build validate /tmp/frost-catalog.json
-
-# Refresh the repository catalog from live sources; review their data terms.
-catalog-build refresh --out ~/.config/frost/catalog.json
-
-# Add non-redistributable Artificial Analysis observations to a local catalog.
-catalog-build refresh --out ~/.config/frost/catalog.json \
-  --restricted-out ~/.config/frost/catalog.local.json
+catalog-build refresh \
+  --overlay "$(brew --prefix frost)/share/frost/tools/catalog-build/overlay.json" \
+  --out ~/.config/frost/catalog.json
+catalog-build validate ~/.config/frost/catalog.json
 ```
 
-Point `catalog_file` at the published file you intend to use. Source IDs become Frost model IDs only through the reviewed `tools/catalog-build/overlay.json`; unmatched IDs are reported for review and receive no automatic mapping. Run from the source checkout or pass an absolute `--overlay` path, because source installation copies the executables but not repository assets. Release archives retain the required assets; a future Homebrew package will place them under `$(brew --prefix frost)/share/frost/`, but no Homebrew release is published yet. A public-only refresh writes an unknown-only `latency.suggestions.json` beside the public catalog, with no Artificial Analysis values, source metadata, or effort classes. With `--restricted-out`, AA-derived suggestions are written beside the restricted catalog, labeled `data_usage: restricted_local_only`, and must stay local. See [Portable configuration examples](config/README.md) for source ownership, licensing, overrides, and the current evidence gap.
+Set `catalog_file = "catalog.json"` in your configuration to use the result. Refreshes show a diff, publish atomically, and retain the previous catalog. You can instead point `catalog_file` at your own compatible JSON catalog, or keep durable local changes in `catalog.overrides.json`.
 
-## Use capacity snapshots
+Optional Artificial Analysis enrichment uses `ARTIFICIAL_ANALYSIS_API_KEY` and `--restricted-out` to write a separate local catalog. Imported data has its own terms; see [source notices](tools/catalog-build/NOTICES.md) and the [catalog guide](config/README.md#produced-catalogs) before redistributing it. From a source checkout, use `--overlay tools/catalog-build/overlay.json`.
 
-Frost reads capacity from a neutral JSON file and never invokes a usage collector. The optional [CodexBar example](examples/capacity/README.md) converts provider observations, publishes the file atomically, and can schedule refreshes with a user LaunchAgent on macOS.
+## Respect subscription limits
 
-The wrapper treats empty, malformed, provider-error, or wrong-source payloads as collection failures and passes each configured source explicitly. If every selected request fails, it exits 4 and leaves the previous snapshot untouched. Partial success publishes the usable observations plus explicit failed-pool states.
+Frost reads a neutral capacity snapshot. Install CodexBar and `jq` and ensure both are on `PATH` to use the optional integration. The CodexBar wrapper collects usage and writes that file independently:
 
 ```sh
-cp examples/capacity/bindings.json ~/.config/frost/capacity-bindings.json
-examples/capacity/refresh.sh --bindings ~/.config/frost/capacity-bindings.json --dry-run
-examples/capacity/refresh.sh --bindings ~/.config/frost/capacity-bindings.json \
+frost_assets="$(brew --prefix frost)/share/frost"
+cp "$frost_assets/examples/capacity/bindings.json" ~/.config/frost/capacity-bindings.json
+# Edit bindings to match your accounts and configured pools, then refresh.
+"$frost_assets/examples/capacity/refresh.sh" \
+  --bindings ~/.config/frost/capacity-bindings.json \
   --out ~/.config/frost/capacity.json
 frost capacity check ~/.config/frost/capacity.json
+frost route --availability exclude "Review this migration for correctness."
 ```
 
-A fresh, applicable snapshot affects only profiles that already meet the quality floor. `--availability exclude` rejects profiles with exhausted required pools, `demote` keeps them behind available or unknown peers within the same objective tier, and `ignore` skips capacity for that call. Missing, stale, estimated-without-opt-in, failed, or unverified observations stay visible as unknown; they do not become evidence that a harness is unavailable. The example config uses `capacity_file = "capacity.json"`, so a missing first snapshot produces a diagnostic and routing continues without capacity.
+Choose `exclude` to skip exhausted pools, `demote` to put them behind peers within the same objective tier, or `ignore` to bypass capacity for a call. Capacity only affects profiles that already meet the quality floor. Missing, stale, failed, or unverified observations remain unknown. Any producer that emits the snapshot format can replace CodexBar; see the [integration guide](examples/capacity/README.md) for requirements and optional scheduled refreshes.
 
 ## Record and replay
 
 ```sh
-frost route --record .local/run.jsonl "…"        # stores task text, answers, and the decision
-frost route --replay .local/run.jsonl --json      # recomputes decisions with the current config, no provider call
-frost route --replay .local/run.jsonl --policy quality
+frost route --record .local/run.jsonl "Investigate the intermittent deadlock."
+frost route --replay .local/run.jsonl --policy quality --json
+frost explain saved-decision.json
 ```
 
-Records carry the question spec hash; replay refuses records answered under a different spec, because changed questions require fresh judgments. Recorded files contain task text and stay local unless deliberately reviewed for sharing.
+Replay recomputes decisions with the current configuration without a provider call. Records include the task text, answers, and decision; keep them local unless you've reviewed them for sharing. A changed question specification requires fresh analysis. Live routing sends the supplied task to TypeSafe.
 
-Recording is part of the command's success contract. An invalid `--record` path fails before the analyzer call. If append or sync fails after analysis, Frost exits 2: JSON output uses error kind `recording` and includes the complete recoverable record, while human output keeps the decision visible and adds a warning.
+## How it works
 
-## Develop
+Frost is written in **Go**, with **TypeSafe Jev** behind a replaceable task-analyzer interface, **TOML** configuration, **JSON** catalogs and capacity snapshots, and **JSONL** recordings. It needs no database or background service.
+
+The CLI calls a deterministic routing core that applies constraints, checks adequacy, and compares eligible profiles according to your policy. External analysis, catalog collection, and usage collection have separate adapters. Model evidence describes what's known about a model; profiles describe what you can run; capacity describes what's available now.
+
+Recommendations currently remain **provisional**. The bundled catalog has no applicable task-family measurements for the configured models, latency classes are priors, and paired task-completion outcomes have not yet been collected. Frost exposes these limits in its results rather than treating configured rankings as measured performance. The [pilot findings](docs/research/router-pilot.md) describe the available evidence.
+
+## Development
+
+Requires Go 1.27 or later.
 
 ```sh
-make check      # fmt-check, build, test, vet, lint
-make test
+git clone https://github.com/marcus/frost.git
+cd frost
+make build       # bin/frost and bin/catalog-build
+make install     # install both to ~/.local/bin
+make check       # formatting, build, race tests, vet, and lint
 ```
 
-The selection core in `internal/router` is deterministic and has no I/O; its tests are the plan's offline acceptance matrix. The TypeSafe adapter in `internal/analyzer/typesafe` is the route-time network seam. Public-data and capacity producers remain separate adapters outside the router. `experiments/probe` remains the original feasibility probe with its recorded pilot answers.
+For source installs, copy the starter files from `config/` using the same layout as the quick start. `make install` installs executables; configuration and producer assets remain in the checkout.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development and source-data boundaries. Frost code is available under the [MIT License](LICENSE); imported or generated source data retains its own terms as documented in `tools/catalog-build/NOTICES.md`.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions and data boundaries. Open an [issue](https://github.com/marcus/frost/issues) for bugs or ideas.
+
+## License
+
+Frost code is [MIT licensed](LICENSE). Imported source data retains its [separate licenses and terms](tools/catalog-build/NOTICES.md).

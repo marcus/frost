@@ -1,0 +1,25 @@
+{
+  "version": "marcus-priors-2026-09-16",
+  "provenance": "User-supplied approximate ordinal quality and cost preferences. Not measured performance, pricing, or verified CLI availability. Lower quality_rank is better; higher cost_rank is cheaper. Native IDs and effort flags require verification before launch support.",
+  "policy": {
+    "version": "bootstrap-v1",
+    "max_quality_rank_by_reasoning_level": [9, 4, 3, 2, 1],
+    "recommended_effort_by_reasoning_level": ["low", "medium", "high", "high", "xhigh"],
+    "missing_context_threshold": 0.65,
+    "consequence_review_threshold": 1.5
+  },
+  "profiles": [
+    {"id":"fable", "label":"Fable", "harness":"unverified", "quality_rank":1, "cost_rank":1, "native_effort":null, "enabled":true},
+    {"id":"astra", "label":"Astra", "harness":"Codex", "quality_rank":1, "cost_rank":2, "native_effort":null, "enabled":true},
+    {"id":"sol", "label":"Sol", "harness":"Codex", "quality_rank":2, "cost_rank":4, "native_effort":null, "enabled":true},
+    {"id":"opus-5", "label":"Opus 5", "harness":"Claude Code", "quality_rank":2, "cost_rank":3, "native_effort":null, "enabled":true},
+    {"id":"grok-4.6-high", "label":"Grok 4.6 high", "harness":"unverified", "quality_rank":3, "cost_rank":7, "native_effort":"high", "enabled":true},
+    {"id":"muse-1.3-spark-contributor-xhigh", "label":"Muse 1.3 Spark contributor xhigh", "harness":"unverified", "quality_rank":3, "cost_rank":11, "native_effort":"xhigh", "enabled":true},
+    {"id":"deepseek-4.1-flash", "label":"DeepSeek 4.1 Flash", "harness":"OpenCode Go", "quality_rank":4, "cost_rank":12, "native_effort":null, "enabled":true},
+    {"id":"terra", "label":"Terra", "harness":"Codex", "quality_rank":5, "cost_rank":6, "native_effort":null, "enabled":true},
+    {"id":"sonnet-5", "label":"Sonnet 5", "harness":"Claude Code", "quality_rank":6, "cost_rank":5, "native_effort":null, "enabled":true},
+    {"id":"gemini-3.8-high", "label":"Gemini 3.8 high", "harness":"Antigravity", "quality_rank":7, "cost_rank":8, "native_effort":"high", "enabled":true},
+    {"id":"luna", "label":"Luna", "harness":"Codex", "quality_rank":8, "cost_rank":10, "native_effort":null, "enabled":true},
+    {"id":"haiku-4.6", "label":"Haiku 4.6", "harness":"Claude Code", "quality_rank":9, "cost_rank":9, "native_effort":null, "enabled":true}
+  ]
+}

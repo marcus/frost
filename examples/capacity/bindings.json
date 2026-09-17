@@ -1,0 +1,27 @@
+[
+  {
+    "pool_id": "codex-main",
+    "provider": "codex",
+    "window_ids": [
+      "primary",
+      "secondary"
+    ]
+  },
+  {
+    "pool_id": "opencode-go",
+    "provider": "opencodego",
+    "window_ids": [
+      "primary",
+      "secondary",
+      "tertiary"
+    ]
+  },
+  {
+    "pool_id": "antigravity-gemini",
+    "provider": "antigravity",
+    "window_ids": [
+      "antigravity-quota-summary-gemini-5h",
+      "antigravity-quota-summary-gemini-weekly"
+    ]
+  }
+]

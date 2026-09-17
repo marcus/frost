@@ -167,7 +167,7 @@ expiry_horizon_hours = 24
 reserve_percent = 5
 max_snapshot_age_minutes = 15
 allow_estimated_measurements = false
-enforce_availability = false
+enforce_availability = true
 ```
 
 Validation: horizon and max age positive; reserve in [0, 50]; all fields default to the values above when the table is absent. `frost config check` prints the resolved capacity policy.
@@ -234,7 +234,7 @@ examples/capacity/refresh.sh --bindings ~/.config/frost/capacity-bindings.json -
 
 Behavior: `set -euo pipefail`; runs `codexbar usage --json` per provider with `--source oauth` where the bindings say so; feeds all rows through `codexbar-to-frost.jq`; writes to `"$out.tmp"` and renames; exits non-zero and leaves the previous file in place when CodexBar fails entirely; keeps rows for providers that failed individually as `source_status: error` (the jq already does this). It never prints account emails, credit inventory, tokens, or raw error bodies. Afterwards it runs `frost capacity check "$out"` when `frost` is on PATH and reports the exit code. A `--dry-run` prints the snapshot to stdout.
 
-The bindings file stays the operator's document. The example continues to omit Spark and Claude.
+The bindings file stays the operator's document. The example includes verified `codex-main`, `claude-main`, `claude-fable`, and `opencode-go` bindings plus unverified `codex-spark`; Antigravity and Grok remain omitted.
 
 Pool topology settled from Marcus's account facts and the September 16 CodexBar output:
 

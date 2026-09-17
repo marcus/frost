@@ -142,10 +142,10 @@ Rules:
 | `unit`, `higher_is_better` | Required for every metric in METRICS.md. Prices and latency are lower-is-better. |
 | `task_family` | Set only when the benchmark is a task-family measurement (`software_change` for SWE-bench). Empty for prices, latency, and indices. |
 | `effort`, `harness`, `provider` | Set when the source states them; otherwise empty, which `findMeasurement` treats as unconstrained. |
-| `observed_at` | The source's own date (SWE-bench `date`, AA publication date, models.dev `last_updated`). `fetched_at` and the payload digest live in the catalog `version` string and the run report, not on each measurement. |
+| `observed_at` | The source's own date (SWE-bench `date`, AA publication date, models.dev `last_updated`). `fetched_at` and the payload digest live in the run report, not on each measurement. |
 | Dependence | A value relayed by a second source (AA scores inside OpenRouter or models.dev) is dropped when the primary source is configured, and otherwise imported once with `source` naming the relay. |
 
-Catalog `version` is `<date>-<short digest of concatenated payload digests>`; `generated_at` is the publish time. Both appear in every Frost decision's provenance, so a replayed eval can name the exact catalog.
+Public catalog `version` is `content-<64 lowercase SHA-256 hex>`; restricted catalog versions append `-restricted`. The hash covers canonical JSON of `schema_version` and the final sorted model records after retention and overrides, excluding `generated_at` and `version`, so identical catalog content keeps the same identity across publish dates. The catalog retains its `generated_at` publish time, while each Frost decision's `generated_at` is the decision time; decision provenance records the catalog `version` to identify the exact input for replay.
 
 ## First adequacy rules
 
@@ -207,7 +207,7 @@ Acceptance cases from the controlling plan, each an offline test:
 - AA data is absent from `--out` even when the key is set.
 - A dropped source retains last-known-good data and the run exits 4 with the source named.
 - An unmapped source ID is listed as a proposal and contributes nothing.
-- A refresh with unchanged payloads produces an empty diff and the same catalog `version`.
+- A refresh with unchanged normalized `schema_version` and final sorted model records produces an empty diff and the same catalog `version`.
 - Removing a model from the overlay removes it from the catalog and the diff says so; `frost config check` then reports profiles referencing it.
 
 ## Work sequence

@@ -2,7 +2,7 @@
 type: Implementation Plan
 title: Frost model router
 description: A CLI recommender driven by semantic task analysis, configurable execution profiles, and optional subscription-capacity snapshots.
-status: draft
+status: active
 ---
 
 # Frost model router
@@ -46,7 +46,7 @@ frost eval run --cases evals/dev.jsonl --record .local/eval-run
 frost eval replay .local/eval-run --config revised.toml
 ```
 
-Require exactly one task input. Flags precede positional task text; `--` allows text beginning with a dash. A plain `frost "task"` alias can forward to `route`. Input is UTF-8 with a documented size limit, initially 128 KiB; oversize input fails clearly without truncation. That limit is Frost's; TypeSafe's public docs do not state a maximum state size, so slice 1 sends a large synthetic state once, records the outcome, and lowers the documented limit if the service rejects it. Task length is not a difficulty feature. Missing input shows concise help and exits; the CLI never waits for an interactive prompt.
+Require exactly one task input. Flags precede positional task text; `--` allows text beginning with a dash. A plain `frost "task"` alias can forward to `route`. Input is UTF-8 with a documented size limit, initially 128 KiB; oversize input fails clearly without truncation. That limit is Frost's; TypeSafe's public docs do not state a maximum state size. A single 128 KiB synthetic task sent on September 16, 2026 was accepted (about 31,400 input tokens, 543 ms), so the limit stands; a larger limit needs its own check. Task length is not a difficulty feature. Missing input shows concise help and exits; the CLI never waits for an interactive prompt.
 
 `--request` is a versioned JSON object with `task`, optional `context` text, and explicit constraints: allowed/excluded profile IDs, task kind, output contract, policy, required capabilities, effort override, and response-time target. A latency target declares its milestone (first useful or complete response) and whether it is a preference or a requirement. V1 explicitly rejects total-task dollar caps because enforcement requires an execution budget or consumption model. Text and supplied context go to the analyzer; private model catalogs and quota/account data need not. Constraint precedence is explicit CLI overrides, structured request, then user configuration. Natural-language preferences can be interpreted into the result, but cannot override an explicit constraint. Conflicting hard requirements produce a conflict result.
 
@@ -266,7 +266,7 @@ Use the standard HTTP library for TypeSafe; there is no need to add an SDK in an
 
 Live calls are probabilistic; selection with an identical validated assessment/config/snapshot/time is deterministic. Save question hash, catalog/policy version and hash, capacity hash, requested and returned TypeSafe model ID, latency, token usage, and program version. A replay can change policy/catalog/capacity without resending task text. Record underlying source snapshot revisions and evidence-policy versions; repeated benchmark values relayed through several sources are one observation, not independent votes. Changed questions require fresh judgments. Store each successful billable result before the next request so a late failure does not discard evidence.
 
-The v1 experiment called `jev-latest`, which returned `jev-1.13.0`; v2 pins `jev-1.13.0` and successfully called that exact version. Pin a supported explicit version for repeatable evals, retain the returned version, and require an eval run before a deliberate update. TypeSafe exposes a models-list endpoint (the SDKs' `models.list`, `GET /v1/models`); `frost config check` uses it to confirm the pinned version is still offered without spending a judgment call, and reports a retired pin as a config error rather than silently falling back to an alias. Alias-only services weaken reproducibility; disclose that if encountered. Text is transmitted to TypeSafe for live analysis; normal route results do not save full text. `--record` explicitly stores task text locally, and public fixtures are synthetic or reviewed for sharing.
+The v1 experiment called `jev-latest`, which returned `jev-1.13.0`; v2 pins `jev-1.13.0` and successfully called that exact version. Pin a supported explicit version for repeatable evals, retain the returned version, and require an eval run before a deliberate update. TypeSafe exposes a models-list endpoint (the SDKs' `models.list`, `GET /v1/models`). On September 16, 2026 it enumerated only the aliases `jev-latest` and `jev-preview` while the evaluation endpoint still accepted the pinned `jev-1.13.0`, so the list cannot prove a pin is retired. `frost config check --verify-model` therefore reports an unlisted pin as a warning that names what the endpoint offers; a retired pin surfaces as a provider error on the next live call. Alias-only listings weaken reproducibility, which is why the returned model is retained in every record. Text is transmitted to TypeSafe for live analysis; normal route results do not save full text. `--record` explicitly stores task text locally, and public fixtures are synthetic or reviewed for sharing.
 
 Build only the CLI surface now. A later API or MCP adapter can call the same `Recommend` boundary; there is no HTTP service or MCP server to build for v1. Harness launch adapters and automatic quota refresh are separate later decisions.
 
@@ -348,4 +348,5 @@ Proceed if the classifier identifies useful task demands and paired outcomes sho
 
 ## Changelog
 
+- 2026-09-16: Slice 1 implemented (td-b9feef): `frost route`, `profiles list`, `config check`, `explain`, record and replay; router core with offline policy tests; TypeSafe adapter; TOML operator config and JSON catalog with portable examples; Makefile, CI, and goreleaser scaffolding. Live findings: the models endpoint lists aliases only, and a 128 KiB state is accepted.
 - 2026-09-16: Reviewed against the TypeSafe skill and live docs before implementation. Slice 1 now uses labeled operator priors for quality and coarse latency classes; analyzer recording and replay moved into slice 1; unknown evidence yields provisional results rather than refusals; modes renamed to `adequate` and `relaxed`; config check validates question IDs and the pinned model; `analysis` output carries full distributions.

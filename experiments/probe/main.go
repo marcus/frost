@@ -148,7 +148,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		defer dest.Close()
+		defer func() { _ = dest.Close() }()
 	}
 	emit := func(r Record) error {
 		if err := validate(r.Response, questions); err != nil {
@@ -279,7 +279,7 @@ func readLines(path string, fn func([]byte) error) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 4096), 4*1024*1024)
 	for s.Scan() {
@@ -312,7 +312,7 @@ func ask(key, model, task string, questions map[string]Question) (Response, erro
 	if err != nil {
 		return result, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024+1))
 	if err != nil {
 		return result, err
@@ -320,7 +320,7 @@ func ask(key, model, task string, questions map[string]Question) (Response, erro
 	if len(b) > 4*1024*1024 {
 		return result, errors.New("response exceeds limit")
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return result, fmt.Errorf("TypeSafe HTTP %d (response body omitted)", resp.StatusCode)
 	}
 	if err := json.Unmarshal(b, &result); err != nil {
@@ -347,7 +347,8 @@ func validate(r Response, qs map[string]Question) error {
 			return fmt.Errorf("invalid confidence %s", id)
 		}
 		expected := map[string]bool{}
-		if q.Type == "score" {
+		switch q.Type {
+		case "score":
 			var levels []string
 			if err := json.Unmarshal(q.Criteria, &levels); err != nil {
 				return err
@@ -361,7 +362,7 @@ func validate(r Response, qs map[string]Question) error {
 			for i := range levels {
 				expected[fmt.Sprint(i)] = true
 			}
-		} else if q.Type == "choice" {
+		case "choice":
 			var options map[string]string
 			if err := json.Unmarshal(q.Criteria, &options); err != nil {
 				return err
@@ -372,7 +373,7 @@ func validate(r Response, qs map[string]Question) error {
 			if !expected[a.Choice] {
 				return fmt.Errorf("invalid choice %s", id)
 			}
-		} else {
+		default:
 			return fmt.Errorf("unknown question type %s", q.Type)
 		}
 		sum := 0.0

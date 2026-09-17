@@ -1,6 +1,6 @@
 # Working in Frost
 
-Frost recommends a model and execution profile for a natural-language task. Profiles use a harness or API interface, with effort when supported. This repository is at the planning and experiment stage. The controlling plan is `docs/plans/planning/model-router.md`; the experiment is evidence for that plan, not the finished CLI.
+Frost recommends a model and execution profile for a natural-language task. Profiles use a harness or API interface, with effort when supported. Slice 1 (the first usable CLI) is implemented: `cmd/frost` over `internal/cli`, with the deterministic selection core in `internal/router`, the TypeSafe adapter in `internal/analyzer/typesafe`, operator config in `internal/config`, and the catalog in `internal/catalog`. The controlling plan is `docs/plans/active/model-router.md`; `experiments/probe` is the original feasibility probe and its recorded evidence, not the CLI. Run `make check` before handing off.
 
 Follow the project-standards skill when available. Use Go, a small shared core, and replaceable adapters for external judgment providers. Keep the CLI non-interactive with structured output. Source-attributed model evidence, operator profiles, and transient capacity have separate owners. Personal rankings are optional. Public-catalog and usage producers stay outside the router. Do not launch a recommended model as a side effect of asking for a recommendation.
 

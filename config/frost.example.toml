@@ -1,0 +1,251 @@
+# Frost operator configuration: what you can actually run, and how to choose.
+# Relative paths resolve against this file's directory.
+#
+# Every quality and cost number here is an operator prior: an ordinal
+# impression, labeled as such in every result. Nothing in this file is a
+# measurement. See config/README.md.
+
+schema_version = 1
+catalog_file = "catalog.example.json"
+
+[analyzer]
+provider = "typesafe"
+model = "jev-1.13.0"
+questions_file = "questions-v3.json"
+api_key_env = "TYPESAFE_API_KEY"
+timeout_seconds = 45
+
+[policy]
+mode = "adequate"
+uncertain_reasoning_quantile = 0.8
+task_family_margin = 0.15
+missing_context_threshold = 0.65
+capability_threshold = 0.7
+consequence_review_threshold = 1.5
+large_workload_threshold = 2.5
+effort_by_level = ["low", "medium", "high", "high", "xhigh"]
+relaxed_level_reduction = 1
+# Reasoning level -> worst acceptable operator quality rank. Level 0 admits
+# everything; level 4 admits only rank 1.
+prior_max_quality_rank_by_level = [9, 4, 3, 2, 1]
+
+# A measured adequacy rule replaces the prior for its task family and levels
+# once the catalog carries the metric. Example shape:
+# [[policy.adequacy_rules]]
+# id = "software-change-moderate"
+# task_family = "software_change"
+# reasoning_levels = [1, 2]
+# metric = "example.repo_edit.resolve_rate"
+# metric_version = "1.0"
+# minimum = 0.70
+# profile_match = "exact"
+# on_missing = "provisional_only"
+
+# Quality rank: lower is better. Cost rank: higher is cheaper.
+
+[[profiles]]
+id = "fable"
+label = "Fable"
+model = "fable"
+access_surface = "claude-code"
+enabled = true
+capabilities = ["repository_tools", "web_research", "image_input"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "slow"
+[profiles.prior]
+quality_rank = 1
+cost_rank = 1
+
+[[profiles]]
+id = "astra"
+label = "Astra"
+model = "astra"
+access_surface = "codex"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "slow"
+pool_ids = ["codex-main"]
+[profiles.prior]
+quality_rank = 1
+cost_rank = 2
+
+[[profiles]]
+id = "sol"
+label = "Sol"
+model = "sol"
+access_surface = "codex"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "medium"
+pool_ids = ["codex-main"]
+[profiles.prior]
+quality_rank = 2
+cost_rank = 4
+
+[[profiles]]
+id = "opus-5"
+label = "Opus 5"
+model = "opus-5"
+access_surface = "claude-code"
+enabled = true
+capabilities = ["repository_tools", "web_research", "image_input"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "medium"
+[profiles.prior]
+quality_rank = 2
+cost_rank = 3
+
+[[profiles]]
+id = "grok-4.6-high"
+label = "Grok 4.6 high"
+model = "grok-4.6"
+access_surface = "grok"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "fixed"
+native_effort = "high"
+mapping_verified = false
+latency_class = "medium"
+[profiles.prior]
+quality_rank = 3
+cost_rank = 7
+
+[[profiles]]
+id = "muse-1.3-spark-contributor-xhigh"
+label = "Muse 1.3 Spark contributor"
+model = "muse-1.3-spark-contributor"
+access_surface = "codex"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "fixed"
+native_effort = "xhigh"
+mapping_verified = false
+latency_class = "slow"
+[profiles.prior]
+quality_rank = 3
+cost_rank = 11
+
+[[profiles]]
+id = "deepseek-4.1-flash"
+label = "DeepSeek 4.1 Flash"
+model = "deepseek-4.1-flash"
+access_surface = "opencode-go"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "none"
+mapping_verified = false
+latency_class = "extra_fast"
+[profiles.prior]
+quality_rank = 4
+cost_rank = 12
+
+[[profiles]]
+id = "terra"
+label = "Terra"
+model = "terra"
+access_surface = "codex"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "fast"
+pool_ids = ["codex-main"]
+[profiles.prior]
+quality_rank = 5
+cost_rank = 6
+
+[[profiles]]
+id = "sonnet-5"
+label = "Sonnet 5"
+model = "sonnet-5"
+access_surface = "claude-code"
+enabled = true
+capabilities = ["repository_tools", "web_research", "image_input"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "fast"
+[profiles.prior]
+quality_rank = 6
+cost_rank = 5
+
+[[profiles]]
+id = "gemini-3.8-high"
+label = "Gemini 3.8 high"
+model = "gemini-3.8"
+access_surface = "antigravity"
+enabled = true
+capabilities = ["repository_tools", "web_research", "image_input"]
+effort_mode = "fixed"
+native_effort = "high"
+mapping_verified = false
+latency_class = "fast"
+[profiles.prior]
+quality_rank = 7
+cost_rank = 8
+
+[[profiles]]
+id = "luna"
+label = "Luna"
+model = "luna"
+access_surface = "codex"
+enabled = true
+capabilities = ["repository_tools", "web_research"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "extra_fast"
+pool_ids = ["codex-main"]
+[profiles.prior]
+quality_rank = 8
+cost_rank = 10
+
+[[profiles]]
+id = "haiku-4.6"
+label = "Haiku 4.6"
+model = "haiku-4.6"
+access_surface = "claude-code"
+enabled = true
+capabilities = ["repository_tools", "web_research", "image_input"]
+effort_mode = "configurable"
+effort_options = ["low", "medium", "high", "xhigh"]
+mapping_verified = false
+latency_class = "extra_fast"
+[profiles.prior]
+quality_rank = 9
+cost_rank = 9
+
+# Typed decisions over supplied state. Disabled until a concrete
+# decision-shaped journey needs it; it has no reasoning effort and no prior.
+[[profiles]]
+id = "jev-typed-decision"
+label = "Jev typed decision"
+model = "jev-1.13.0"
+access_surface = "typesafe-api"
+enabled = false
+output_contracts = ["typed_decision"]
+effort_mode = "none"
+mapping_verified = false
+latency_class = "extra_fast"
+
+# Quota pools are declared here and observed by an external snapshot.
+# Bindings are draft until the main Codex five-hour window is verified.
+[[pools]]
+id = "codex-main"
+kind = "subscription"
+marginal_cost = "included"
+mapping_verified = false
+required_window_ids = ["primary", "secondary"]
+expiry_preference_window_ids = ["secondary"]
+non_rollover_window_ids = ["primary", "secondary"]

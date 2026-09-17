@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "version": "example-2026-09-16",
+  "generated_at": "2026-09-16T00:00:00Z",
+  "models": [
+    {
+      "id": "fable",
+      "label": "Fable",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "astra",
+      "label": "Astra",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "sol",
+      "label": "Sol",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "opus-5",
+      "label": "Opus 5",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "grok-4.6",
+      "label": "Grok 4.6",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "muse-1.3-spark-contributor",
+      "label": "Muse 1.3 Spark contributor",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "deepseek-4.1-flash",
+      "label": "DeepSeek 4.1 Flash",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "terra",
+      "label": "Terra",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "sonnet-5",
+      "label": "Sonnet 5",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "gemini-3.8",
+      "label": "Gemini 3.8",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "luna",
+      "label": "Luna",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "haiku-4.6",
+      "label": "Haiku 4.6",
+      "output_contracts": ["generated_text", "code_edit", "structured_object"],
+      "input_modalities": ["text", "image"],
+      "generation_mechanism": "autoregressive"
+    },
+    {
+      "id": "jev-1.13.0",
+      "label": "Jev 1.13.0",
+      "aliases": ["jev"],
+      "output_contracts": ["typed_decision"],
+      "input_modalities": ["text"],
+      "generation_mechanism": "undisclosed"
+    }
+  ]
+}

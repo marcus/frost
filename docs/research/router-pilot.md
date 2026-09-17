@@ -49,7 +49,7 @@ A held-out one-line authorization fix scored 2.00 reasoning and received indepen
 
 ## CodexBar feasibility
 
-The installed `codexbar` is version 0.60.2. Its read-only JSON interface worked for Codex, OpenCode Go, and Antigravity. Both OAuth and CLI sources agreed on main Codex weekly usage; both omitted the primary window. Claude OAuth returned an expired-token error. The [plan](../plans/planning/model-router.md#live-codexbar-feasibility-evidence) records dated observations and their implications.
+The installed `codexbar` is version 0.60.2. Its read-only JSON interface worked for Codex, OpenCode Go, and Antigravity. Both OAuth and CLI sources agreed on main Codex weekly usage; both omitted the primary window. Claude OAuth returned an expired-token error. The [plan](../plans/active/model-router.md#live-codexbar-feasibility-evidence) records dated observations and their implications.
 
 The important finding is the data shape: multiple windows, shared pools, exact versus estimated measurements, separate model-family pools, source observation times, and missing values. Main Codex's known weekly headroom does not establish usable immediate capacity while the primary window's applicability is unresolved. A CodexBar auth error is not proof the corresponding inference CLI is unavailable.
 

@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          install-only: true
+      - name: Verify annotated tag still targets live main
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: ./scripts/release-check-state.sh tagged
+      - run: make check
+      - run: git diff --check
+      - run: make release-verify
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Recheck annotated tag against live main
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: ./scripts/release-check-state.sh tagged
+      - name: Render exact changelog section
+        run: ./scripts/release-notes.sh "${{ github.ref_name }}" > "$RUNNER_TEMP/release-notes.md"
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

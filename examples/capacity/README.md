@@ -1,6 +1,6 @@
 # External capacity snapshots
 
-Frost's proposed quota input is independent of CodexBar. This optional converter turns a CodexBar usage array into the draft neutral schema in the [plan](../../docs/plans/planning/model-router.md#capacity-input).
+Frost's proposed quota input is independent of CodexBar. This optional converter turns a CodexBar usage array into the draft neutral schema in the [plan](../../docs/plans/active/model-router.md#capacity-input).
 
 ```sh
 codexbar usage --provider codex --source oauth --json |

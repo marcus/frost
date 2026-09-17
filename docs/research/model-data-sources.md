@@ -8,7 +8,7 @@ stale_after: 2026-10-16
 
 # Public model data for Frost
 
-Verified September 16, 2026 in America/Los_Angeles, September 17 UTC. This is design research for the [controlling plan](../plans/planning/model-router.md), not an implemented importer. Public JSON was fetched read-only from models.dev, OpenRouter, and SWE-bench. Artificial Analysis access and terms were checked in official documentation; no account, key, paid subscription, authenticated request, or scheduled job was created.
+Verified September 16, 2026 in America/Los_Angeles, September 17 UTC. This is design research for the [controlling plan](../plans/active/model-router.md), not an implemented importer. Public JSON was fetched read-only from models.dev, OpenRouter, and SWE-bench. Artificial Analysis access and terms were checked in official documentation; no account, key, paid subscription, authenticated request, or scheduled job was created.
 
 ## Recommendation
 

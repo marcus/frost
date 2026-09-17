@@ -20,19 +20,23 @@ const exampleConfig = "../../config/frost.example.toml"
 
 // stubAnalyzer returns a fixed assessment without any network.
 type stubAnalyzer struct {
-	level    int
-	contract string
-	family   string
-	missing  float64
-	err      error
-	calls    int
-	lastTask router.Task
-	spec     *analyzer.Spec
+	level     int
+	contract  string
+	family    string
+	missing   float64
+	err       error
+	calls     int
+	lastTask  router.Task
+	spec      *analyzer.Spec
+	onAnalyze func()
 }
 
 func (s *stubAnalyzer) AnalyzeRaw(_ context.Context, task router.Task) (router.Assessment, json.RawMessage, error) {
 	s.calls++
 	s.lastTask = task
+	if s.onAnalyze != nil {
+		s.onAnalyze()
+	}
 	if s.err != nil {
 		return router.Assessment{}, nil, s.err
 	}
@@ -204,6 +208,42 @@ func TestRouteInputsAndPrecedence(t *testing.T) {
 	json.Unmarshal(h.stdout.Bytes(), &d)
 	if d.Recommendation == nil || d.Recommendation.ProfileID != "sol" {
 		t.Fatalf("allow list: %+v", d.Recommendation)
+	}
+}
+
+func TestRecordFailure(t *testing.T) {
+	for _, path := range []string{t.TempDir(), filepath.Join(t.TempDir(), "missing", "run.jsonl")} {
+		h := newHarness()
+		if code := h.run("route", "--config", exampleConfig, "--json", "--record", path, "Fix typo."); code != ExitUsage || h.stub.calls != 0 {
+			t.Fatalf("preflight: exit=%d calls=%d stderr=%s", code, h.stub.calls, h.stderr.String())
+		}
+	}
+	h := newHarness()
+	path := filepath.Join(t.TempDir(), "run.jsonl")
+	h.stub.onAnalyze = func() {
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if code := h.run("route", "--config", exampleConfig, "--json", "--record", path, "Fix typo."); code != ExitUsage || h.stub.calls != 1 {
+		t.Fatalf("append: exit=%d calls=%d stderr=%s", code, h.stub.calls, h.stderr.String())
+	}
+	var result struct {
+		Error  struct{ Kind string } `json:"error"`
+		Record struct {
+			Task     router.Task      `json:"task"`
+			Decision *router.Decision `json:"decision"`
+			Raw      json.RawMessage  `json:"raw_response"`
+		} `json:"record"`
+	}
+	if err := json.Unmarshal(h.stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Error.Kind != "recording" || result.Record.Task.Text != "Fix typo." || result.Record.Decision == nil || len(result.Record.Raw) == 0 {
+		t.Fatalf("missing explicit error or recoverable result: %s", h.stdout.String())
 	}
 }
 

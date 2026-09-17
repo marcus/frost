@@ -21,14 +21,25 @@ type Store struct {
 
 var _ evidence.Store = (*Store)(nil)
 
-// Open prepares a store at path. With create false the file must already
-// exist; with create true a missing file is created on first Append.
+// Open prepares a regular-file store at path. With create true it verifies
+// append access now, before callers spend work obtaining a record.
 func Open(path string, create bool) (*Store, error) {
 	if path == "" {
 		return nil, errors.New("evidence path is required")
 	}
-	if _, err := os.Stat(path); err != nil {
+	if info, err := os.Stat(path); err != nil {
 		if !create || !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	} else if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("evidence path %s is not a regular file", path)
+	}
+	if create {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		if err := f.Close(); err != nil {
 			return nil, err
 		}
 	}

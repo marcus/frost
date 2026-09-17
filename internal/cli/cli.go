@@ -378,7 +378,17 @@ func runRoute(env Env, args []string) int {
 			CapacityHash:   l.capHash,
 		}
 		if err := store.Append(rec); err != nil {
-			outln(env.Stderr, "record: "+err.Error())
+			message := "recording failed: " + err.Error()
+			outln(env.Stderr, "frost: "+message)
+			if f.jsonOut {
+				// Preserve the billable result for recovery without presenting a
+				// successful record operation to non-interactive callers.
+				writeJSON(env, map[string]any{"schema_version": router.SchemaVersion, "error": map[string]any{"kind": "recording", "message": message}, "record": rec})
+			} else {
+				d.Warnings = append(d.Warnings, message)
+				RenderHuman(env.Stdout, d)
+			}
+			return ExitUsage
 		}
 	}
 	return emit(env, f.jsonOut, d)

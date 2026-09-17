@@ -37,22 +37,40 @@ if [ -z "$providers" ]; then
   providers="$(jq -r '[.[].provider] | unique | join(",")' "$bindings")"
 fi
 
-rows="$(mktemp)"
-trap 'rm -f "$rows" "${out:-/nonexistent}.tmp"' EXIT
+work="$(mktemp -d)"
+snapshot_tmp=""
+trap 'rm -rf "$work"; if [ -n "$snapshot_tmp" ]; then rm -f "$snapshot_tmp"; fi' EXIT
+rows="$work/rows.json"
+# A provider can expose several account sources. Query each declared binding
+# once and pass its source explicitly rather than relying on auto-selection.
+jq -r --arg providers "$providers" '
+  ($providers | split(",")) as $selected |
+  [.[] | select(.provider as $p | $selected | index($p)) |
+    {provider, source: (.source // "")}] | unique_by([.provider, .source])[] |
+  [.provider, .source] | @tsv
+' "$bindings" > "$work/requests"
 echo '[]' > "$rows"
 ok_count=0
-IFS=',' read -r -a list <<< "$providers"
-for provider in "${list[@]}"; do
+while IFS=$'\t' read -r provider source; do
   [ -n "$provider" ] || continue
+  args=(usage --json --provider "$provider")
+  [ -z "$source" ] || args+=(--source "$source")
   # Per-provider failure is preserved as an error row; the rest still publish.
-  if payload="$(codexbar usage --json --provider "$provider" 2>/dev/null)" && [ -n "$payload" ]; then
-    jq -s '.[0] + .[1]' "$rows" <(printf '%s' "$payload") > "$rows.next" && mv "$rows.next" "$rows"
+  if codexbar "${args[@]}" > "$work/payload.json" 2>/dev/null &&
+    jq -e --arg p "$provider" --arg s "$source" '
+      type == "array" and length > 0 and
+      all(.[]; type == "object" and .provider == $p and ($s == "" or .source == $s)) and
+      any(.[]; (.usage | type) == "object" and .error == null)
+    ' "$work/payload.json" >/dev/null 2>&1 &&
+    jq -s '.[0] + .[1]' "$rows" "$work/payload.json" > "$rows.next" 2>/dev/null; then
+    mv "$rows.next" "$rows"
     ok_count=$((ok_count + 1))
   else
-    jq --arg p "$provider" '. + [{provider: $p, error: "collection failed"}]' "$rows" > "$rows.next" && mv "$rows.next" "$rows"
+    jq --arg p "$provider" --arg s "$source" '. + [{provider: $p, source: $s, error: "collection failed"}]' "$rows" > "$rows.next"
+    mv "$rows.next" "$rows"
     echo "refresh.sh: provider $provider: collection failed" >&2
   fi
-done
+done < "$work/requests"
 if [ "$ok_count" -eq 0 ]; then
   echo "refresh.sh: every provider failed; previous snapshot left in place" >&2
   exit 4
@@ -64,8 +82,9 @@ if [ "$dry_run" -eq 1 ]; then
   exit 0
 fi
 mkdir -p "$(dirname "$out")"
-printf '%s\n' "$snapshot" > "$out.tmp"
-mv -f "$out.tmp" "$out"
+snapshot_tmp="$(mktemp "$out.tmp.XXXXXX")"
+printf '%s\n' "$snapshot" > "$snapshot_tmp"
+mv -f "$snapshot_tmp" "$out"
 echo "refresh.sh: wrote $out ($ok_count providers)"
 if command -v frost >/dev/null; then
   if frost capacity check "$out" >/dev/null 2>&1; then

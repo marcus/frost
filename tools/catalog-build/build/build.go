@@ -383,8 +383,14 @@ func mustJSON(v any) []byte {
 	return append(b, '\n')
 }
 
-// Publish validates and atomically replaces the catalog at path, keeping
-// the previous file as catalog.previous.json in the same directory.
+// PreviousPath returns the backup path Publish uses for an existing catalog.
+func PreviousPath(path string) string {
+	dir := filepath.Dir(path)
+	return filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), ".json")+".previous.json")
+}
+
+// Publish validates and atomically replaces the catalog at path, keeping the
+// previous file at PreviousPath(path).
 func Publish(path string, c CatalogFile) error {
 	raw := mustJSON(c)
 	if _, err := catalog.Parse(raw); err != nil {
@@ -418,7 +424,7 @@ func Publish(path string, c CatalogFile) error {
 		return err
 	}
 	if _, err := os.Stat(path); err == nil {
-		prev := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), ".json")+".previous.json")
+		prev := PreviousPath(path)
 		if err := os.Rename(path, prev); err != nil {
 			_ = os.Remove(tmpName)
 			return err

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/marcus/frost/internal/catalog"
+	"github.com/marcus/frost/tools/catalog-build/build"
 )
 
 const fixtures = "testdata/2026-09-16"
@@ -295,6 +296,8 @@ func TestRefreshRejectsEquivalentOutputPaths(t *testing.T) {
 		{name: "existing hard links", out: hardA, restricted: hardB},
 		{name: "public is suggestions", out: filepath.Join(dir, "latency.suggestions.json")},
 		{name: "restricted is suggestions", out: filepath.Join(dir, "catalog.json"), restricted: filepath.Join(dir, "latency.suggestions.json")},
+		{name: "public is restricted backup", out: filepath.Join(dir, "restricted.previous.json"), restricted: filepath.Join(dir, "restricted.json")},
+		{name: "restricted is public backup", out: filepath.Join(dir, "public.json"), restricted: filepath.Join(dir, "public.previous.json")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -314,6 +317,49 @@ func TestRefreshRejectsEquivalentOutputPaths(t *testing.T) {
 	suggestions, err := validateOutputPaths(out, restricted)
 	if err != nil || suggestions != filepath.Join(dir, "distinct", "latency.suggestions.json") {
 		t.Fatalf("distinct paths: suggestions=%q err=%v", suggestions, err)
+	}
+}
+
+func TestRefreshRejectsBackupCollisionBeforeSecondPublish(t *testing.T) {
+	dir := t.TempDir()
+	seedDir := filepath.Join(dir, "seed")
+	seedPublic := filepath.Join(seedDir, "catalog.json")
+	seedRestricted := filepath.Join(seedDir, "catalog.local.json")
+	env := map[string]string{"HOME": dir}
+	if code, _, stderr := exec(t, env, "refresh", "--from-fixtures", fixtures, "--out", seedPublic, "--restricted-out", seedRestricted, "--overlay", "overlay.json"); code != exitOK {
+		t.Fatalf("seed refresh: exit %d: %s", code, stderr)
+	}
+	publicBytes, err := os.ReadFile(seedPublic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restrictedBytes, err := os.ReadFile(seedRestricted)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	restricted := filepath.Join(dir, "restricted.json")
+	public := build.PreviousPath(restricted)
+	if err := os.WriteFile(public, publicBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(restricted, restrictedBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := exec(t, env, "refresh", "--from-fixtures", fixtures, "--out", public, "--restricted-out", restricted, "--overlay", "overlay.json", "--json")
+	if code != exitInput || !strings.Contains(stderr, "output paths must be distinct") {
+		t.Fatalf("second publish: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	afterPublic, _ := os.ReadFile(public)
+	afterRestricted, _ := os.ReadFile(restricted)
+	if !bytes.Equal(afterPublic, publicBytes) || !bytes.Equal(afterRestricted, restrictedBytes) {
+		t.Fatal("collision rejection must leave both last-good catalogs unchanged")
+	}
+	if got := catalogSourceCount(t, public, "artificialanalysis:"); got != 0 {
+		t.Fatalf("public output leaked %d restricted measurements", got)
+	}
+	if got := catalogSourceCount(t, restricted, "artificialanalysis:"); got == 0 {
+		t.Fatal("restricted output lost its AA measurements")
 	}
 }
 

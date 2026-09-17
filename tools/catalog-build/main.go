@@ -231,9 +231,16 @@ type outputPath struct {
 // files, and existing hard links before refresh can mutate any destination.
 func validateOutputPaths(out, restricted string) (string, error) {
 	suggestions := filepath.Join(filepath.Dir(out), "latency.suggestions.json")
-	outputs := []outputPath{{label: "--out", path: out}, {label: "latency suggestions", path: suggestions}}
+	outputs := []outputPath{
+		{label: "--out", path: out},
+		{label: "--out backup", path: build.PreviousPath(out)},
+		{label: "latency suggestions", path: suggestions},
+	}
 	if restricted != "" {
-		outputs = append(outputs, outputPath{label: "--restricted-out", path: restricted})
+		outputs = append(outputs,
+			outputPath{label: "--restricted-out", path: restricted},
+			outputPath{label: "--restricted-out backup", path: build.PreviousPath(restricted)},
+		)
 	}
 	for i := range outputs {
 		canonical, err := canonicalOutputPath(outputs[i].path)

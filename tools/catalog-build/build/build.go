@@ -492,6 +492,34 @@ func LoadCurrent(path string) (*router.Catalog, error) {
 	return &c, nil
 }
 
+// LoadLatencySuggestions reads a previously published suggestions artifact. A
+// missing file means there is no last-good value to retain.
+func LoadLatencySuggestions(path string) (*LatencySuggestions, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var suggestions LatencySuggestions
+	if err := json.Unmarshal(raw, &suggestions); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", path, err)
+	}
+	if suggestions.SchemaVersion != 1 {
+		return nil, fmt.Errorf("decode %s: unsupported schema_version %d", path, suggestions.SchemaVersion)
+	}
+	return &suggestions, nil
+}
+
+// RetainLatencySuggestions preserves the prior evidence while migrating old
+// public-median labeling to the restricted/local contract.
+func RetainLatencySuggestions(previous LatencySuggestions) LatencySuggestions {
+	previous.DataUsage = "restricted_local_only"
+	previous.Basis = "restricted local prior retained from the last successful Artificial Analysis refresh; do not redistribute; verify against measured end-to-end latency"
+	return previous
+}
+
 // LatencySuggestions is the coarse class per model derived from source
 // medians. Restricted source values are included only for an explicitly
 // requested restricted catalog and are never written into the catalog.

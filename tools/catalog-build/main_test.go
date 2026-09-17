@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -242,6 +243,26 @@ func TestRefreshRetainsRestrictedAAWhenSkipped(t *testing.T) {
 	if wantAA == 0 {
 		t.Fatal("initial restricted catalog has no AA measurements")
 	}
+	suggestionsPath := filepath.Join(dir, "latency.suggestions.json")
+	raw, err := os.ReadFile(suggestionsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var previousSuggestions build.LatencySuggestions
+	if err := json.Unmarshal(raw, &previousSuggestions); err != nil {
+		t.Fatal(err)
+	}
+	wantSuggestion := previousSuggestions.Suggestions["sol"]
+	wantGeneratedAt := previousSuggestions.GeneratedAt
+	previousSuggestions.DataUsage = ""
+	previousSuggestions.Basis = "prior derived from public medians; verify against measured end-to-end latency"
+	raw, err = json.MarshalIndent(previousSuggestions, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(suggestionsPath, append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	partialFixtures := filepath.Join(dir, "partial-fixtures")
 	for _, sourceName := range []string{"models.dev", "swebench"} {
@@ -292,6 +313,23 @@ func TestRefreshRetainsRestrictedAAWhenSkipped(t *testing.T) {
 	}
 	if got := catalogSourceCount(t, out, "artificialanalysis:"); got != 0 {
 		t.Fatalf("public catalog leaked %d AA measurements", got)
+	}
+	raw, err = os.ReadFile(suggestionsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var retainedSuggestions build.LatencySuggestions
+	if err := json.Unmarshal(raw, &retainedSuggestions); err != nil {
+		t.Fatal(err)
+	}
+	if got := retainedSuggestions.Suggestions["sol"]; !reflect.DeepEqual(got, wantSuggestion) {
+		t.Fatalf("retained sol suggestion = %+v, want %+v", got, wantSuggestion)
+	}
+	if !retainedSuggestions.GeneratedAt.Equal(wantGeneratedAt) {
+		t.Fatalf("retained generated_at = %s, want %s", retainedSuggestions.GeneratedAt, wantGeneratedAt)
+	}
+	if retainedSuggestions.DataUsage != "restricted_local_only" || !strings.Contains(retainedSuggestions.Basis, "retained") || strings.Contains(retainedSuggestions.Basis, "public medians") {
+		t.Fatalf("retained suggestions did not migrate restricted labeling: %+v", retainedSuggestions)
 	}
 }
 

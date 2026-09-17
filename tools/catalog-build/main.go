@@ -367,9 +367,19 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 		_, _ = fmt.Fprintln(stderr, "catalog-build: every source failed; nothing published")
 		return exitNothing
 	}
+	var previousSuggestions *build.LatencySuggestions
+	if *restrictedOut != "" && sourceUnavailable(results, "artificialanalysis") {
+		previousSuggestions, err = build.LoadLatencySuggestions(suggestionsOut)
+		if err != nil {
+			return fail(stderr, sh.jsonOut, stdout, exitInput, fmt.Errorf("current latency suggestions: %w", err))
+		}
+	}
 	asm, err := build.AssembleWithRestrictedPrevious(results, overlay, overrides, current, restrictedCurrent, time.Now().UTC(), *restrictedOut != "")
 	if err != nil {
 		return fail(stderr, sh.jsonOut, stdout, exitInput, err)
+	}
+	if previousSuggestions != nil {
+		asm.Suggestions = build.RetainLatencySuggestions(*previousSuggestions)
 	}
 	report.Diff = build.Compute(current, asm)
 	report.ModelCount = len(asm.Catalog.Models)
@@ -409,6 +419,15 @@ func runRefresh(ctx context.Context, args []string, stdout, stderr io.Writer, ge
 		}
 	}
 	return report.Exit
+}
+
+func sourceUnavailable(results []build.SourceResult, name string) bool {
+	for _, result := range results {
+		if result.Name == name {
+			return result.Status == "failed" || result.Status == "skipped"
+		}
+	}
+	return false
 }
 
 func runFetch(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) int {

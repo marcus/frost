@@ -7,7 +7,7 @@ status: implemented
 
 # Slice 2: capacity-aware selection
 
-This plan supports the controlling [model-router plan](../active/model-router.md), sections "Capacity input" and "Choosing with subscription capacity". It turns those contracts into concrete packages, types, policy fields, tests, and a work sequence against the code as it stands after slice 1. Track it as td-d398e8. Approved September 16, 2026 with the decisions recorded at the end.
+Implementation: `td-3af594`; planning and approval: `td-d398e8`. This implemented plan supports the controlling [model-router plan](../active/model-router.md), sections "Capacity input" and "Choosing with subscription capacity".
 
 Outcome: `frost route --capacity snapshot.json` (or a configured `capacity_file`) makes a fresh, applicable, exact observation of remaining subscription usage affect the choice among profiles that are already adequate, never the quality floor. Absent, stale, estimated, or unknown observations are visible in the result and change nothing unless the operator opts in.
 
@@ -139,7 +139,7 @@ type ProfileAvailability struct {
     Reasons        []string
 }
 
-func EvaluatePools(cap *Capacity, pools []Pool, profiles []Profile, pol CapacityPolicy, now time.Time) map[string]ProfileAvailability
+func EvaluatePools(cap *Capacity, pools []Pool, profiles []Profile, pol CapacityPolicy, now time.Time) CapacityEvaluation
 ```
 
 Per pool, in order:

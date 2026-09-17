@@ -1,4 +1,4 @@
-// Frost architecture model. Authored from the Go sources on 2026-09-16 (slice 1 implemented).
+// Frost architecture model. Authored from the Go sources on 2026-09-16 (slices 1, 1a and 2 implemented).
 // Elements tagged #proposed come from docs/plans/active/model-router.md and are not built.
 specification {
   element person
@@ -38,11 +38,11 @@ model {
       metadata { uid 'frost.cli' fractalColor '#759EB5' evidence ['internal/cli/cli.go', 'internal/cli/render.go'] }
 
       commands = component 'Commands and task resolution' {
-        description 'route, profiles list, config check (--verify-model), explain, version. Exactly one task source: positional text, --file, --stdin or --request (schema 1); 128 KiB limit; explicit flags override the request constraints. --record and --replay switch the route into recording or provider-free replay.'
+        description 'route, profiles list, config check (--verify-model), capacity check, explain, version. Exactly one task source: positional text, --file, --stdin or --request (schema 1); 128 KiB limit; explicit flags override request constraints. --record and --replay switch route into recording or provider-free replay; replay can use a new capacity snapshot.'
         metadata { uid 'frost.cli.commands' fractalColor '#759EB5' evidence ['internal/cli/cli.go'] }
       }
       loader = component 'Input loading' {
-        description 'Resolves the operator config path (--config, FROST_CONFIG, XDG), then loads the catalog and question spec it references and validates them together; error problems stop the command, warnings go to stderr.'
+        description 'Resolves the operator config path (--config, FROST_CONFIG, XDG), then loads and validates its catalog, question spec and optional neutral capacity snapshot. An invalid explicit snapshot stops the command; a missing or invalid configured snapshot is reported and routing continues without capacity.'
         metadata { uid 'frost.cli.loader' fractalColor '#759EB5' evidence ['internal/cli/cli.go'] }
       }
       render = component 'Rendering and exit codes' {
@@ -57,7 +57,7 @@ model {
       metadata { uid 'frost.router' fractalColor '#739886' evidence ['internal/router/types.go', 'internal/router/recommend.go'] }
 
       contract = component 'Domain contract' {
-        description 'Task and Constraints, Assessment (full distributions), Catalog and Model measurements, Profile with labeled Prior and latency class, Policy with adequacy rules, and the versioned Decision with provenance. Includes a Capacity placeholder that Recommend accepts as nil.'
+        description 'Task and Constraints, Assessment (full distributions), Catalog and Model measurements, Profile with labeled Prior and latency class, Policy with adequacy and capacity rules, Pool topology, neutral Capacity observations, and the versioned Decision with provenance.'
         metadata { uid 'frost.router.contract' fractalColor '#739886' evidence ['internal/router/types.go'] }
       }
       recommend = component 'Recommend' {
@@ -77,8 +77,8 @@ model {
           metadata { uid 'frost.router.recommend.adequacy' fractalColor '#739886' evidence ['internal/router/recommend.go', 'internal/router/types.go'] }
         }
         objective = component 'Objective and alternatives' {
-          description 'Orders adequate candidates by mode: adequate (cheapest), quality (best prior), fast (fastest latency class), relaxed (adequate at a lowered floor); ties break by cost then stable ID. Adds cheaper, stronger, faster and conditional alternatives and marks the result provisional when it rests on a prior, an unverified mapping or an unverifiable latency requirement.'
-          metadata { uid 'frost.router.recommend.objective' fractalColor '#739886' evidence ['internal/router/recommend.go'] }
+          description 'Orders adequate candidates by mode, then applies fresh availability, expiring included usage, cost and stable ID inside objective tie groups. Exhausted pools exclude or demote by policy; unknown capacity cannot earn a boost. Alternatives and warnings retain the evidence basis, and capacity never raises the quality floor.'
+          metadata { uid 'frost.router.recommend.objective' fractalColor '#739886' evidence ['internal/router/recommend.go', 'internal/router/capacity.go'] }
         }
       }
     }
@@ -122,9 +122,8 @@ model {
     }
 
     capacity = component 'Capacity snapshot' {
-      #proposed
-      description 'Slice 2: parse a neutral usage snapshot (pools, windows, freshness) and prefer expiring included capacity among adequate candidates. Today the router only carries a placeholder and warns that capacity was not considered.'
-      metadata { uid 'frost.capacity' fractalColor '#B59669' evidence ['docs/plans/active/model-router.md', 'internal/router/types.go'] }
+      description 'Parses and validates the neutral usage snapshot, hashes its bytes for provenance, and evaluates freshness separately from producer-specific data. Router policy computes per-pool and per-profile availability and expiry eligibility against operator-owned topology.'
+      metadata { uid 'frost.capacity' fractalColor '#B59669' evidence ['internal/capacity/capacity.go', 'internal/router/capacity.go', 'docs/plans/implemented/slice-2-capacity.md'] }
     }
 
     eval = component 'Evaluation' {
@@ -156,7 +155,7 @@ model {
       metadata { uid 'files.config' fractalColor '#B59669' evidence ['config/frost.example.toml', 'internal/config/config.go'] }
     }
     catalog = store 'catalog.json' {
-      description 'Neutral model evidence referenced from the config. The portable example carries no measurements; a producer is meant to replace it with a versioned, source-attributed file.'
+      description 'Neutral model evidence referenced from the config. The portable example carries no measurements; catalog-build can replace it with a versioned, source-attributed file while retaining source terms and provenance.'
       technology 'JSON'
       metadata { uid 'files.catalog' fractalColor '#B59669' evidence ['config/catalog.example.json', 'config/README.md'] }
     }
@@ -171,10 +170,9 @@ model {
       metadata { uid 'files.records' fractalColor '#82A6B6' evidence ['internal/evidence/jsonl/jsonl.go', 'internal/cli/cli.go'] }
     }
     capacity = store 'capacity.json' {
-      #proposed
-      description 'Draft neutral usage snapshot with per-pool windows, measurement quality and source status. Optional; absent means capacity is not considered.'
+      description 'Optional neutral usage snapshot with per-pool windows, observation time, measurement quality and source status. It cannot add pools or profile bindings; absent means capacity is not considered.'
       technology 'JSON'
-      metadata { uid 'files.capacity' fractalColor '#B59669' evidence ['docs/plans/active/model-router.md', 'examples/capacity/README.md'] }
+      metadata { uid 'files.capacity' fractalColor '#B59669' evidence ['internal/capacity/capacity.go', 'examples/capacity/README.md'] }
     }
   }
 
@@ -185,29 +183,30 @@ model {
   }
 
   catalogBuild = external 'Catalog producer' {
-    #proposed
-    description 'Slice 1a: tools/catalog-build imports a public registry with optional benchmark enrichment and provenance, and writes the versioned catalog. Source connectors stay outside the router.'
-    metadata { uid 'catalog-build' fractalColor '#B59669' evidence ['docs/plans/active/model-router.md', 'docs/plans/active/catalog-and-profile-evidence.md'] }
+    description 'The separate catalog-build command fetches or replays recorded models.dev, SWE-bench Verified and optional restricted Artificial Analysis payloads, applies reviewed identity mappings and operator overrides, validates and diffs the result, then publishes atomically. Source connectors and licensing stay outside the router.'
+    technology 'Go command and source adapters'
+    metadata { uid 'catalog-build' fractalColor '#B59669' evidence ['tools/catalog-build/main.go', 'tools/catalog-build/source/source.go', 'tools/catalog-build/build/build.go', 'docs/plans/implemented/slice-1a-catalog-producer.md'] }
   }
 
   codexbar = external 'CodexBar snapshot producer' {
-    #proposed
-    description 'An external producer converts CodexBar usage output into the neutral snapshot; the repository ships a jq example with draft bindings. Frost never imports CodexBar types or runs it.'
-    technology 'jq'
-    metadata { uid 'codexbar-producer' fractalColor '#B59669' evidence ['examples/capacity/codexbar-to-frost.jq', 'examples/capacity/bindings.json', 'examples/capacity/README.md'] }
+    description 'The optional external wrapper collects CodexBar usage, converts only configured provider windows into the neutral snapshot, drops account and credit details, and atomically publishes it. A user LaunchAgent can refresh it every five minutes. Frost never imports CodexBar types or runs it.'
+    technology 'Bash and jq'
+    metadata { uid 'codexbar-producer' fractalColor '#B59669' evidence ['examples/capacity/refresh.sh', 'examples/capacity/codexbar-to-frost.jq', 'examples/capacity/bindings.json', 'examples/capacity/install-launchd.sh'] }
   }
 
   // Current relationships
-  operator .invokes frost.cmd 'frost route | profiles | config | explain' { metadata { uid 'operator-runs-frost' } }
+  operator .invokes frost.cmd 'frost route | profiles | config | capacity | explain' { metadata { uid 'operator-runs-frost' } }
+  operator .invokes catalogBuild 'catalog-build refresh | fetch | diff | validate' { metadata { uid 'operator-runs-catalog-build' } }
+  operator .invokes codexbar 'Run refresh.sh directly or through the optional LaunchAgent' { metadata { uid 'operator-runs-capacity-producer' } }
   frost.cmd .calls frost.cli.commands 'cli.Run(Env)' { metadata { uid 'cmd-runs-cli' } }
-  frost.cli.commands .calls frost.cli.loader 'Load config, catalog and questions' { metadata { uid 'commands-load' } }
+  frost.cli.commands .calls frost.cli.loader 'Load config, catalog, questions and optional capacity' { metadata { uid 'commands-load' } }
   frost.cli.loader .calls frost.config 'Resolve and Load, then Validate against the catalog and spec' { metadata { uid 'loader-config' } }
   frost.cli.loader .calls frost.catalog 'Load the referenced catalog' { metadata { uid 'loader-catalog' } }
   frost.cli.loader .calls frost.analyzer.spec 'LoadSpec and Validate the question IDs' { metadata { uid 'loader-spec' } }
   frost.config .reads files.config 'Parse TOML, hash raw bytes' { metadata { uid 'config-reads-file' } }
   frost.catalog .reads files.catalog 'Parse JSON, hash raw bytes' { metadata { uid 'catalog-reads-file' } }
   frost.analyzer.spec .reads files.questions 'Parse and hash the question set' { metadata { uid 'spec-reads-file' } }
-  frost.config .provides frost.router.contract 'Profiles, priors, latency classes, Policy and adequacy rules' { metadata { uid 'config-provides-inputs' } }
+  frost.config .provides frost.router.contract 'Profiles, pools, priors, latency classes, Policy and adequacy/capacity rules' { metadata { uid 'config-provides-inputs' } }
   frost.catalog .provides frost.router.contract 'Catalog: models, contracts, modalities, measurements' { metadata { uid 'catalog-provides-inputs' } }
   frost.cli.commands .calls frost.analyzer.typesafe 'AnalyzeRaw(task) for a live route' { metadata { uid 'route-analyze' } }
   frost.analyzer.typesafe .reads frost.analyzer.spec 'Sends the questions; validates answers against them' { metadata { uid 'typesafe-uses-spec' } }
@@ -223,13 +222,13 @@ model {
   frost.cli.commands .reads frost.evidence.jsonl 'Replay records with --replay: recompute Recommend, no provider call' { metadata { uid 'route-replay' } }
   frost.evidence.jsonl .writes files.records 'One fsynced JSON line per record' { metadata { uid 'jsonl-writes-file' } }
   frost.evidence.jsonl .reads files.records 'Read records in file order' { metadata { uid 'jsonl-reads-file' } }
+  codexbar .writes files.capacity 'Publish a complete snapshot atomically' { metadata { uid 'codexbar-writes-snapshot' } }
+  frost.capacity .reads files.capacity 'Parse the schema, validate topology and retain source observation times' { metadata { uid 'capacity-reads-file' } }
+  frost.cli.loader .calls frost.capacity 'Load an optional --capacity or configured snapshot' { metadata { uid 'loader-capacity' } }
+  frost.capacity .provides frost.router.contract 'Capacity observations, availability evaluations and hash provenance' { metadata { uid 'capacity-provides-inputs' } }
+  catalogBuild .writes files.catalog 'Validate, diff and atomically publish a versioned source-attributed catalog' { metadata { uid 'catalog-build-writes' } }
 
   // Proposed relationships
-  codexbar .writes files.capacity 'Publish a complete snapshot atomically' { #proposed metadata { uid 'codexbar-writes-snapshot' } }
-  frost.capacity .reads files.capacity 'Validate schema and freshness' { #proposed metadata { uid 'capacity-reads-file' } }
-  frost.cli.loader .calls frost.capacity 'Load an optional --capacity snapshot' { #proposed metadata { uid 'loader-capacity' } }
-  frost.capacity .provides frost.router.contract 'Capacity with hash and freshness' { #proposed metadata { uid 'capacity-provides-inputs' } }
-  catalogBuild .writes files.catalog 'Write a versioned, source-attributed catalog' { #proposed metadata { uid 'catalog-build-writes' } }
   frost.eval .reads frost.evidence.jsonl 'Replay slice 1 recordings and recorded outcomes' { #proposed metadata { uid 'eval-reads-records' } }
   frost.eval .calls frost.router.recommend.derive 'Compare policies over the same recorded assessments' { #proposed metadata { uid 'eval-recommend' } }
   frost.api .calls frost.router.recommend.derive 'Recommend over HTTP' { #proposed metadata { uid 'api-recommend' } }

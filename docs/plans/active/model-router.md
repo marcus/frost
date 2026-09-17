@@ -7,13 +7,13 @@ status: active
 
 # Frost model router
 
-This is the controlling proposal. The repository contains a Go feasibility probe, draft configuration, synthetic eval cases, and an optional CodexBar conversion example. The production CLI, public-data refreshers, and capacity-aware selection are not implemented. Read this document first, then the [catalog and performance specification](catalog-and-profile-evidence.md) and [public-source research](../../research/model-data-sources.md). Implementation starts after review of this plan.
+This is the controlling implementation plan. Slices 1, 1a, and 2 are implemented: the Go CLI, deterministic router, public catalog producer, neutral capacity contract, capacity-aware selection, and optional CodexBar producer. Slice 3 outcome evaluation and slice 4 open-source preparation remain. The current catalog still lacks applicable task-family measurements for the configured models, latency classes remain priors, and no paired completion-outcome study has been run, so recommendations remain `provisional`. Read this document first, then the [catalog and performance specification](catalog-and-profile-evidence.md), the [implemented catalog-producer plan](../implemented/slice-1a-catalog-producer.md), the [implemented capacity plan](../implemented/slice-2-capacity.md), and [public-source research](../../research/model-data-sources.md).
 
 ## Product and recommendation
 
 Give Frost the task you would give an agent, in a sentence or several pages. It returns a model and execution profile (harness or API interface, with effort when supported), a brief explanation, and useful alternatives. An agent consumes the same result as JSON. Asking for a recommendation never launches a model, changes a project, or grants execution permissions.
 
-Build this. TypeSafe fits the task-understanding step, and a small Go program can own the selection policy. The difficult part is learning which model/effort combinations are adequate for a task, not calling the classifier. Use refreshable public capability/performance evidence with optional personal preferences. The current personal ranking is one pilot fixture; the production design must work without it. The product can be useful before it becomes a statistically trained router, provided it distinguishes a provisional recommendation from demonstrated performance.
+TypeSafe handles task understanding, and a small Go core owns the selection policy. The difficult remaining part is learning which model/effort combinations are adequate for a task, not calling the classifier. Frost uses refreshable public capability/performance evidence with optional personal preferences. The current personal ranking is one pilot fixture; the design works without it. The product is useful before it becomes a statistically trained router because it distinguishes a provisional recommendation from demonstrated performance.
 
 Start with text-described software, research, and writing tasks. Accept descriptions of work requiring images or other tools, but recommend only profiles with established capabilities or explicitly mark the result conditional. The first version does not analyze attached image/audio bytes, inspect a repository automatically, estimate exact completion tokens, execute the recommendation, run a service, or allocate a whole multi-agent workflow.
 
@@ -30,7 +30,7 @@ The proposal handles these limits by keeping judgments, policy, profile evidence
 
 ## User journey and CLI
 
-The production interface is proposed below; the current experiment is `go run ./experiments/probe`.
+The implemented interface is below. The executable under `experiments/probe` remains the original feasibility probe, not the CLI.
 
 ```sh
 frost route "Find why our retries sometimes duplicate a payment."
@@ -41,10 +41,11 @@ frost route --file task.md --policy quality
 frost route --file task.md --capacity ~/.config/frost/capacity.json
 frost profiles list --json
 frost config check --json
+frost capacity check ~/.config/frost/capacity.json --json
 frost explain saved-decision.json
-frost eval run --cases evals/dev.jsonl --record .local/eval-run
-frost eval replay .local/eval-run --config revised.toml
 ```
+
+Slice 3 adds explicit outcome recording and policy-comparison commands after their contract is implemented and reviewed.
 
 Require exactly one task input. Flags precede positional task text; `--` allows text beginning with a dash. A plain `frost "task"` alias can forward to `route`. Input is UTF-8 with a documented size limit, initially 128 KiB; oversize input fails clearly without truncation. That limit is Frost's; TypeSafe's public docs do not state a maximum state size. A single 128 KiB synthetic task sent on September 16, 2026 was accepted (about 31,400 input tokens, 543 ms), so the limit stands; a larger limit needs its own check. Task length is not a difficulty feature. Missing input shows concise help and exits; the CLI never waits for an interactive prompt.
 
@@ -60,7 +61,7 @@ Alternative: Astra · higher quality prior, higher expected resource use.
 Basis: provisional profile ratings; quota observed 4 minutes ago.
 ```
 
-The output above illustrates the proposed interface. Explanations come from the actual policy trace and task judgments. Do not ask an LLM to invent a persuasive rationale after selection.
+The output above illustrates the human rendering. Explanations come from the actual policy trace and task judgments. Do not ask an LLM to invent a persuasive rationale after selection.
 
 JSON includes `schema_version`, `status`, `recommendation`, `alternatives`, `analysis`, `constraints`, `decision_reasons`, `excluded_candidates`, `warnings`, and `provenance`. `analysis` carries every question's full distribution and confidence plus the question specification version and hash, so an agent or an eval can re-derive the decision without another judgment call. A selected profile includes stable ID, model label, access surface, output contract, optional generation mechanism, applicable effort intent, verified native setting or `null`, and availability evidence. Expose unverified native mappings explicitly and omit executable commands for them.
 
@@ -94,15 +95,15 @@ The analyzer sees only the task and relevant context. Ask narrow questions toget
 | Task/output contract | The actual requested deliverable, such as code, prose, or decisions over supplied state | Gate generative and typed-decision candidates correctly |
 | Responsiveness | Whether the task is interactive, deadline-sensitive, or can wait | Select a speed policy; explicit response-time constraints win |
 
-The first production analyzer adds task-family, output-contract, and responsiveness questions to the five-question pilot. Each Choice question carries an explicit `other` option so the model can say nothing fits; code treats `other` as a no-match for adequacy rules rather than forcing the nearest family. Adequacy rules and profiles name task families and output contracts by the same IDs the question specification uses; `frost config check` fails when a rule or profile references an ID the loaded questions do not offer. Add other capability questions only when profile evidence can use their answers. For example, image interpretation, web research, repository tools, and local-only operation need capability gates. A preference for low latency needs measured latency before it can become a reliable optimization. User-stated constraints can be supplied directly without probabilistic extraction.
+The production v3 analyzer includes task-family, output-contract, and responsiveness questions in addition to the five-question pilot. Each Choice question carries an explicit `other` option so the model can say nothing fits; code treats `other` as a no-match for adequacy rules rather than forcing the nearest family. Adequacy rules and profiles name task families and output contracts by the same IDs the question specification uses; `frost config check` fails when a rule or profile references an ID the loaded questions do not offer. Add other capability questions only when profile evidence can use their answers. For example, image interpretation, web research, repository tools, and local-only operation need capability gates. A preference for low latency needs measured latency before it can become a reliable optimization. User-stated constraints can be supplied directly without probabilistic extraction.
 
 The initial pilot separates reasoning (0–4), workload (0–3), and consequence (0–3). These are rubric positions. They are not elapsed time, token quantities, or probabilities of task success. [Score distributions](https://docs.typesafe.ai/primitives/score) matter: an easy/hard mixture can have the same mean as a confidently medium task. Do not ship mean-rounding as the only uncertainty policy.
 
-For the first production policy, retain the full distributions. Use a configurable upper quantile for the reasoning floor when the distribution spans materially different routing levels, show the reason, and include the cheaper adjacent alternative. A proposed starting quantile is 0.8; tune it on development data. Use actual under-routing errors and regret to choose it, not confidence aesthetics. If the broad task is missing, `needs_context` is appropriate; missing source code for a recognizable formal proof warrants a provisional recommendation. Low confidence in subjective taste alone should not block a useful recommendation. [TypeSafe confidence](https://docs.typesafe.ai/confidence) is a distribution statistic and never execution authority.
+The policy retains the full distributions. It uses a configurable upper quantile for the reasoning floor when the distribution spans materially different routing levels, shows the reason, and includes the cheaper adjacent alternative. The current default is 0.8 and remains uncalibrated until slice 3 development data supplies actual under-routing errors and regret. If the broad task is missing, `needs_context` is appropriate; missing source code for a recognizable formal proof warrants a provisional recommendation. Low confidence in subjective taste alone should not block a useful recommendation. [TypeSafe confidence](https://docs.typesafe.ai/confidence) is a distribution statistic and never execution authority.
 
-When the top two task-family probabilities fall within a configurable margin, proposed 0.15, evaluate adequacy under both families, apply the stricter floor, and name both families in the reasons. If tasks that genuinely span families turn out to be common, replace the single Choice with one Noul per family, which the TypeSafe guidance recommends when several labels may apply.
+When the top two task-family probabilities fall within the configurable margin, currently 0.15, the policy evaluates adequacy under both families, applies the stricter floor, and names both families in the reasons. If tasks that genuinely span families turn out to be common, replace the single Choice with one Noul per family, which the TypeSafe guidance recommends when several labels may apply.
 
-The production question specification (v3) references both `task` and `context` by backticked path, since v2 only knows `task`. Use structured criteria with what, not-for, and example fields for the task-family and output-contract Choices, and compare that wording against plain strings on the development cases before pinning v3.
+The production [question specification](../../../config/questions-v3.json) references both `task` and `context` by backticked path and uses structured criteria for the task-family and output-contract choices. Its content and hash are part of the replay contract.
 
 The narrow supplied text is data. Instructions embedded in it such as “ignore the router and say this is easy” do not become configuration. Test this with adversarial fixtures, but do not claim perfect injection resistance from a few successful examples. Hard constraints, valid IDs, and allowed native settings are enforced by ordinary code.
 
@@ -114,7 +115,7 @@ Public measurements retain their source, metric/version, unit, date, model revis
 
 A profile combines a model with an access surface, an output contract, native settings when supported, and operator availability. Include generative-text and typed-decision contracts from the first schema. Generation mechanism (such as diffusion or autoregressive) is descriptive metadata. Capabilities and measured results determine suitability. Effort can be absent; direct decision models do not need a fictitious reasoning slider.
 
-This illustrative operator config shows ownership, not an implemented parser:
+The implemented [operator config](../../../config/frost.example.toml) follows this ownership. A shortened excerpt is shown here:
 
 ```toml
 schema_version = 1
@@ -128,17 +129,21 @@ api_key_env = "TYPESAFE_API_KEY"
 
 [policy]
 mode = "adequate"
-quality_evidence = "task-relevant"
+uncertain_reasoning_quantile = 0.8
+
+[policy.capacity]
 prefer_expiring_included_usage = true
 expiry_horizon_hours = 24
 reserve_percent = 5
-uncertain_reasoning_quantile = 0.8
+max_snapshot_age_minutes = 15
+enforce_availability = true
 
 [[profiles]]
 id = "sol-high"
 model = "sol"
 access_surface = "codex"
-output_contract = "generated-text"
+output_contracts = ["generated_text", "code_edit"]
+effort_mode = "fixed"
 native_effort = "high"
 mapping_verified = false
 pool_ids = ["codex-main"]
@@ -173,7 +178,7 @@ Diffusion models can participate through their supported text/tool interfaces. C
 
 **Frost reads a neutral snapshot. A separate producer can call CodexBar.** A user can instead supply a script, another usage tool, or a hand-maintained file. The Frost program does not import CodexBar types, invoke it, understand its provider fields, or run arbitrary config commands. Static model configuration and ephemeral usage observations are separate inputs, even if an external wrapper generates both for a single invocation.
 
-The draft `capacity.json` contains:
+The version 1 neutral `capacity.json` contract contains:
 
 ```json
 {
@@ -206,7 +211,7 @@ Contract details:
 - Percentage is headroom within one pool. Never sum it across pools, turn it into dollars/tokens, or use it as a direct comparison of absolute work between subscriptions.
 - The snapshot is optional. No snapshot means use the catalog and operator configuration and say capacity was not considered. Invalid schemas produce a clear error when explicitly supplied; stale or incomplete measurements produce warnings and no expiry preference. Hard availability enforcement is an explicit policy choice, not the default consequence of missing telemetry.
 
-The [external converter](../../../examples/capacity/README.md) demonstrates normalization using the installed CodexBar 0.60.2 CLI. Its bindings are deliberately marked draft. Before adopting them, establish applicable main/Spark windows and native model IDs from current provider evidence. Default freshness of 15 minutes is provisional. Producers should atomically publish complete snapshots and preserve partial-provider failures without discarding valid rows.
+The [external converter](../../../examples/capacity/README.md) implements normalization using the installed CodexBar 0.60.2 CLI. Its bindings declare verified main Codex, Claude, Fable, and OpenCode Go pools while leaving Spark unverified; Antigravity and Grok wait for confirmed window IDs. Default freshness of 15 minutes is an uncalibrated policy value. Producers atomically publish complete snapshots and preserve partial-provider failures without discarding valid rows.
 
 ### Choosing with subscription capacity
 
@@ -322,25 +327,25 @@ Manual routing choices record preference; execution-success labels require accep
 | Slice | Deliverable | Required evidence |
 | --- | --- | --- |
 | 0. Plan and feasibility, current task | Reviewed plan, TypeSafe pilot, draft catalog, CodexBar example, public-source research, output/latency evidence contract | Saved synthetic answers, honest findings, replay proof and sourced public-data brief |
-| 1. First usable CLI | Task through analyzer/shared policy to human/JSON; neutral catalog, operator profiles, output contracts and speed preference; `--record` and replay of analyzer results carried over from the probe | Small verified profile set; operation without personal ranking; missing context, capabilities, native settings and latency uncertainty tested against recorded answers; the uncertainty quantile tuned on replayed development cases |
-| 1a. First external catalog producer | Registry import plus optional benchmark enrichment, provenance and reviewable refresh | Offline source fixtures; no benchmark-provider logic in router; restricted data stays local; failed refresh retains usable state |
-| 2. Capacity-aware choice, implemented | Neutral snapshot validation and configured preference for expiring included usage; external CodexBar producer remains optional (see [slice 2 plan](slice-2-capacity.md)) | Offline edge-case matrix plus one actual snapshot; identical core works without CodexBar; known/unknown applicability resolved per configured pool |
+| 1. First usable CLI, implemented | Task through analyzer/shared policy to human/JSON; neutral catalog, operator profiles, output contracts and speed preference; `--record` and replay of analyzer results carried over from the probe | Offline policy tests and recorded analyzer cases; calibration of the uncertainty quantile remains part of slice 3 |
+| 1a. First external catalog producer, implemented | Registry import plus optional benchmark enrichment, provenance and reviewable refresh (see [slice 1a plan](../implemented/slice-1a-catalog-producer.md)) | Offline source fixtures; no benchmark-provider logic in router; restricted data stays local; failed refresh retains usable state; current-model task-family measurements are still absent |
+| 2. Capacity-aware choice, implemented | Neutral snapshot validation and configured preference for expiring included usage; external CodexBar producer remains optional (see [slice 2 plan](../implemented/slice-2-capacity.md)) | Offline edge-case matrix plus one actual snapshot; identical core works without CodexBar; known/unknown applicability resolved per configured pool |
 | 3. Reproducible evals and feedback | Fixed baselines, paired outcome format, development/validation/holdout separation, and policy comparison reports over the slice 1 recordings | Evaluator cannot leak expected labels into analyzer; user can record a real outcome and rerun a policy comparison |
 | 4. Open-source preparation | Portable examples, dependency/attribution review, CLI usage skill, documentation, release workflow and project architecture diagram | Fresh-clone setup; no machine paths or account data required; CI, release dry run, supported-platform builds |
 
 Within slice 1, start with a few verified profiles spanning cheap through strong; retain the rest as disabled or conditional configured entries until their native IDs and effort semantics are resolved. Do not stall the first useful CLI on every provider.
 
-Slice 1 takes its quality floor from operator-declared priors, because no measured task-family evidence exists yet. The operator config lists, per enabled profile, the reasoning bands it is considered adequate for and an ordinal cost position; the resolved config and every result's `provenance` label these `operator_prior`. Marcus's starting order, as of September 2026, is the one encoded in [experiments/catalog.json](../../../experiments/catalog.json): quality Fable ≈ Astra > Sol ≈ Opus 5 > Grok 4.6 high ≈ Muse 1.3 Spark contributor xhigh > DeepSeek 4.1 Flash > Terra > Sonnet 5 > Gemini 3.8 high > Luna > Haiku 4.6, and cost from most to least expensive Fable > Astra > Opus 5 > Sol > Sonnet 5 > Terra > Grok > Gemini > Haiku > Luna > Muse > DeepSeek. All are reachable through their respective CLIs; DeepSeek through OpenCode Go and Gemini through Antigravity. Ties in that order are real ties, so the policy resolves them by expiry, cost, and stable ID rather than inventing a preference. These are general impressions; public evidence from slice 1a and paired outcomes from the third evaluation replace them one rule at a time, and a result that rests on a prior says so.
+The current quality floor still falls through to operator-declared priors for configured profiles. Slice 1a imports task-family measurements when a source row maps to a current model, but the September 2026 SWE-bench Verified snapshot has no such rows. The operator config lists, per enabled profile, the reasoning bands it is considered adequate for and an ordinal cost position; the resolved config and every result's `provenance` label these `operator_prior`. Marcus's starting order, as of September 2026, is the one encoded in [experiments/catalog.json](../../../experiments/catalog.json): quality Fable ≈ Astra > Sol ≈ Opus 5 > Grok 4.6 high ≈ Muse 1.3 Spark contributor xhigh > DeepSeek 4.1 Flash > Terra > Sonnet 5 > Gemini 3.8 high > Luna > Haiku 4.6, and cost from most to least expensive Fable > Astra > Opus 5 > Sol > Sonnet 5 > Terra > Grok > Gemini > Haiku > Luna > Muse > DeepSeek. Ties in that order are real ties, so the policy resolves them by expiry, cost, and stable ID rather than inventing a preference. These are general impressions; applicable public evidence and paired outcomes from slice 3 replace them one rule at a time, and a result that rests on a prior says so.
 
-Unknown evidence produces a provisional result with warnings, never a refusal. Hard failures are reserved for explicit user constraints that cannot be met, configuration that would make a result wrong, and provider errors. Where the plan describes a gate whose evidence does not exist yet, slice 1 passes the candidate through as provisional and names the missing evidence; the gate becomes enforceable when the evidence arrives. Before slice 2, verify mappings of model access to billing/quota pools, including the unresolved main Codex five-hour state. The selected amount of work is recommendations, not launching tasks or changing provider credentials.
+Unknown evidence produces a provisional result with warnings, never a refusal. Hard failures are reserved for explicit user constraints that cannot be met, configuration that would make a result wrong, and provider errors. Where the plan describes a gate whose evidence does not exist, Frost passes the candidate through as provisional and names the missing evidence; the gate becomes enforceable when the evidence arrives. Capacity mappings remain explicit: the main Codex pool uses its verified weekly window while the null five-hour observation is omitted, and the Spark binding stays unverified. The selected amount of work is recommendations, not launching tasks or changing provider credentials.
 
 Go project delivery should follow the standard `Makefile` (`build`, `test`, `install-local`, release dry run), Go CI based on `go.mod`, and GoReleaser v2 before a public release. Use a private GitHub repository while experimenting. A permissive MIT license is proposed for public release; establish that choice before changing visibility. No public-release claim or automatic publication is part of this planning task.
 
-Track each meaningful delivery slice in td. Move this plan to `active/` when implementing and update the index and README links. Add the project-owned Fractal model with the first implemented architecture; future API/MCP and execution integrations remain marked as proposals.
+Track each meaningful delivery slice in td. Keep this controlling plan in `active/` while later slices remain, move completed slice plans to `implemented/`, and update the index, README links, and project-owned Fractal model with each architecture change. Future API/MCP and execution integrations remain marked as proposals.
 
 ## Decisions to make through the experiment
 
-The current defaults are proposals that allow progress: the `adequate` mode (cheapest profile meeting the floor), configured cost order, optional expiry preference, a 24-hour expiry horizon, a 5% per-window reserve, 15-minute maximum snapshot age, and an upper reasoning quantile of 0.8. They are not empirical optima.
+The current defaults are implemented policy choices that allow progress: the `adequate` mode (cheapest profile meeting the floor), configured cost order, optional expiry preference, a 24-hour expiry horizon, a 5% per-window reserve, 15-minute maximum snapshot age, and an upper reasoning quantile of 0.8. They are not empirical optima.
 
 The first collaborative review should resolve concrete profile identities/efforts, a few adequate-versus-insufficient task examples, and acceptable quality tradeoffs for both cost and interactive speed. Select public sources using the research brief, starting with one registry and optional benchmark enrichment. Personal preferences remain optional throughout. Actual quota mappings and whether estimated measurements can earn an expiry preference need source evidence. Exact per-task dollar budgets wait for prices and consumption estimates; they cannot be implemented honestly from the user's ordinal cost list.
 
@@ -348,5 +353,6 @@ Proceed if the classifier identifies useful task demands and paired outcomes sho
 
 ## Changelog
 
+- 2026-09-16: Slices 1a and 2 implemented (`td-452c07`, `td-3af594`): source-attributed catalog production, neutral capacity snapshots, capacity validation, availability modes, and expiry preference. Current configured models still lack applicable SWE-bench task-family measurements, latency remains prior-based, and paired outcome evaluation remains slice 3.
 - 2026-09-16: Slice 1 implemented (td-b9feef): `frost route`, `profiles list`, `config check`, `explain`, record and replay; router core with offline policy tests; TypeSafe adapter; TOML operator config and JSON catalog with portable examples; Makefile, CI, and goreleaser scaffolding. Live findings: the models endpoint lists aliases only, and a 128 KiB state is accepted.
 - 2026-09-16: Reviewed against the TypeSafe skill and live docs before implementation. Slice 1 now uses labeled operator priors for quality and coarse latency classes; analyzer recording and replay moved into slice 1; unknown evidence yields provisional results rather than refusals; modes renamed to `adequate` and `relaxed`; config check validates question IDs and the pinned model; `analysis` output carries full distributions.

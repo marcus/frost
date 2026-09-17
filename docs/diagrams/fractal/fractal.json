@@ -3,7 +3,7 @@
   "id": "frost",
   "title": "Frost",
   "description": "A model and execution-profile recommender: task analysis in, one deterministic Recommend policy, human or JSON out.",
-  "provenance": "Authored on 2026-09-16 from the Go sources under cmd/ and internal/ after slice 1 was implemented, plus config/ examples and the README. Elements marked proposed come from docs/plans/active/model-router.md (slices 1a, 2, 3 and the later API/MCP note) and are not built; the router's Capacity placeholder and the examples/capacity jq converter exist but nothing in the executable consumes a snapshot yet. Evidence paths are pointers into this repository, not proof that a claim is still current.",
+  "provenance": "Updated on 2026-09-16 from the Go sources under cmd/, internal/ and tools/catalog-build after slices 1, 1a and 2 were implemented, plus config/ and examples/capacity. Only evaluation and the later API/MCP adapters remain proposed. Current public data still provides no applicable task-family measurements for the configured models, and no paired completion-outcome evaluation exists; the diagram describes implemented boundaries, not recommendation quality. Evidence paths are pointers into this repository, not proof that a claim is still current.",
   "boundaries": [
     {
       "id": "deterministic-core",
@@ -18,7 +18,7 @@
     {
       "id": "public-evidence",
       "title": "Public model evidence",
-      "description": "Neutral, source-attributed facts about models. Frost reads the file; a producer, not the router, knows the public sources.",
+      "description": "Neutral, source-attributed facts about models. Frost reads the file; a producer, not the router, knows the separately licensed sources.",
       "kind": "ownership",
       "members": [
         "frost.catalog",
@@ -41,7 +41,7 @@
     },
     {
       "id": "transient-capacity",
-      "title": "Transient capacity (proposed)",
+      "title": "Transient capacity",
       "description": "Ephemeral usage observations, produced outside Frost and read as a neutral snapshot. A snapshot cannot redefine profile-to-pool topology.",
       "kind": "ownership",
       "members": [
@@ -53,8 +53,8 @@
     },
     {
       "id": "network-seam",
-      "title": "The only network seam",
-      "description": "Task text leaves the machine here and nowhere else. The adapter owns transport, retries and validation.",
+      "title": "Route-time network seam",
+      "description": "Task text leaves the route here and nowhere else. Catalog and capacity producers have separate source-specific network boundaries and never receive task text.",
       "kind": "network",
       "members": [
         "frost.analyzer.typesafe",
@@ -78,17 +78,16 @@
     {
       "id": "overview",
       "title": "The big picture",
-      "description": "One binary, one pure selection core, and the files and service around it.",
-      "expanded": [
-        "frost"
-      ],
+      "description": "The frost CLI and separate catalog producer around one pure selection core, with operator-owned files and an optional external capacity producer.",
+      "expanded": [],
       "proposed": false,
       "lens": "structure"
     },
     {
       "id": "route",
       "title": "One route, start to finish",
-      "description": "A task enters through the CLI, is judged by the analyzer, decided by Recommend, and rendered; --record keeps the answers and --replay recomputes without the provider.",
+      "description": "A task enters through the CLI, optional capacity is loaded, the task is judged by the analyzer, Recommend applies adequacy before availability and expiry, and the result is rendered; --record keeps the answers and --replay recomputes without the provider.",
+      "scope": "frost",
       "expanded": [
         "frost",
         "frost.cli",
@@ -102,9 +101,9 @@
     {
       "id": "recommend",
       "title": "Inside Recommend",
-      "description": "How a validated assessment becomes a Decision inside the pure core: read the distributions, apply hard constraints, decide adequacy from measurements or labeled priors, then order by the chosen objective and add alternatives. The CLI calls in and receives the Decision; config and catalog supply the contract types.",
+      "description": "How a validated assessment becomes a Decision inside the pure core: read distributions, apply hard constraints, decide adequacy from measurements or labeled priors, then order by objective, availability, expiring included usage, cost and stable ID. Capacity cannot raise the quality floor.",
+      "scope": "frost.router",
       "expanded": [
-        "frost",
         "frost.router",
         "frost.router.recommend"
       ],
@@ -114,19 +113,17 @@
     {
       "id": "inputs",
       "title": "Who owns each input",
-      "description": "Public model evidence, operator-owned configuration and the proposed transient capacity snapshot are separate inputs with separate owners; the router only sees their normalized types.",
-      "expanded": [
-        "frost",
-        "files"
-      ],
-      "proposed": true,
+      "description": "Public model evidence, operator-owned configuration and transient capacity observations are separate inputs with separate owners; the router only sees their normalized types.",
+      "expanded": [],
+      "proposed": false,
       "lens": "trust",
       "layout": "elk-layered-down"
     },
     {
       "id": "roadmap",
-      "title": "What the plan adds next",
-      "description": "Planned, not built: a catalog producer (slice 1a), capacity-aware choice with an external CodexBar producer (slice 2), reproducible evaluation (slice 3), and later API and MCP adapters over the same Recommend boundary.",
+      "title": "What remains proposed",
+      "description": "Planned, not built: reproducible paired-outcome evaluation (slice 3) and later API and MCP adapters over the same Recommend boundary.",
+      "scope": "frost",
       "expanded": [
         "frost"
       ],

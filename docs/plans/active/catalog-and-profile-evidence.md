@@ -2,12 +2,12 @@
 type: Design Specification
 title: Frost catalog, profiles, and performance evidence
 description: Source-independent model evidence, optional operator preferences, and task-specific comparison across generative and typed-decision models.
-status: draft
+status: active
 ---
 
 # Catalog, profiles, and performance evidence
 
-This supports the [controlling model-router plan](model-router.md). It defines the changing inputs to the router. Public-data refreshers and production evidence-based selection are proposed; the personal ranking in `experiments/catalog.json` exists only to reproduce the pilot.
+This supports the [controlling model-router plan](model-router.md). It defines the changing inputs to the router. The public-data producer and capacity-aware selection are implemented; paired outcome evidence and production calibration remain open. The personal ranking in `experiments/catalog.json` is retained as a labeled fallback and reproducible pilot baseline.
 
 ## Three inputs with distinct owners
 
@@ -120,7 +120,7 @@ When no matching rule or measurement exists, mark adequacy unknown. Permit a sep
 
 ## Live meeting response journey
 
-A user supplying a live transcript may value a useful answer in one or two seconds more than deeper reasoning delivered much later. This belongs in v1's request and decision model. A proposed explicit field is `response_time_target_ms`, paired with `latency_mode = prefer | require` and the desired milestone `first_useful_response | complete_response`. Natural language can establish a speed preference; an explicit numeric target takes precedence.
+A user supplying a live transcript may value a useful answer in one or two seconds more than deeper reasoning delivered much later. The implemented request model uses `constraints.latency.target_ms`, paired with `mode = prefer | require` and `milestone = first_useful_response | complete_response`; the CLI exposes the same contract as `--latency-ms`, `--latency-mode`, and `--latency-milestone`. Natural language can establish a speed preference; an explicit numeric target takes precedence.
 
 For `prefer`, optimize observed responsiveness among adequate candidates and show the quality tradeoff. For `require`, use only relevant latency evidence, accounting for uncertainty. If no candidate supports the target, return `no_match` with no selected recommendation; conditional alternatives may explain what evidence or constraint relaxation would make a profile eligible. A recommendation is a prediction, not an enforceable runtime SLA. A user-authorized fast policy can lower the desired quality target explicitly; it cannot remove functional or hard correctness requirements silently.
 
@@ -132,7 +132,7 @@ When repeated transcript updates make analysis overhead significant, measure tha
 
 ## Acceptance and staged delivery
 
-The first schema supports optional evidence, task family, output contract, generation metadata, and latency preference. It works with the personal pilot fixture or a generated catalog. The first external producer imports one registry and optional quality measurements; adding a source changes a connector and mapping, not the routing core. Refresh scheduling remains outside the runtime.
+The schema supports optional evidence, task family, output contract, generation metadata, and latency preference. It works with the personal pilot fixture or a generated catalog. The external producer imports models.dev, SWE-bench Verified, and optional restricted Artificial Analysis observations; adding a source changes a connector and mapping, not the routing core. Catalog refresh scheduling remains outside the runtime.
 
 Offline acceptance cases include: no personal ranking; a new public model without access; two sources disagreeing on one version; unmatched effort; stale performance measurements; restricted data excluded from distributable artifacts; a dropped source retaining last-known-good data; typed-decision versus code-generation requests; an unknown generation mechanism with known capabilities; a fast adequate profile beating a slower higher-scoring one for an explicit meeting objective; unsupported latency deadlines; long-context prefill; different price units; and error-versus-abstention tradeoffs.
 

@@ -2,12 +2,12 @@
 type: Implementation Plan
 title: Slice 1a, public catalog producer
 description: An external Go command that fetches permitted public sources, normalizes them into Frost's neutral catalog with provenance, and publishes it atomically with a reviewable diff.
-status: active
+status: implemented
 ---
 
 # Slice 1a: public catalog producer
 
-td: `td-b850c7`. This plan supports the [controlling router plan](../active/model-router.md), the [catalog and evidence specification](../active/catalog-and-profile-evidence.md), and the [public-source research brief](../../research/model-data-sources.md). Read those first; this document decides how the producer is built. Decisions marked **settled** are ready to implement. The open questions were answered on September 16, 2026; the answers are folded into the decisions below.
+Implementation: `td-452c07`; planning and approval: `td-b850c7`. This implemented plan supports the [controlling router plan](../active/model-router.md), the [catalog and evidence specification](../active/catalog-and-profile-evidence.md), and the [public-source research brief](../../research/model-data-sources.md).
 
 ## Outcome
 
@@ -82,7 +82,7 @@ Payloads are saved verbatim under `testdata/<date>/<source>.json` by `fetch --re
 | Fields used | Per result: `name`, `agent`, `agent_org`, `model_display`, `model_org`, `reasoning_effort` (null, `medium`, or `high` observed), `resolved` (percent), `date`, `folder`, `checked`, `tags` (contains `Model: <id>` and `System: Attempts - N`), `cost`. |
 | Maps to | One measurement per result row whose `Model:` tag maps through the overlay: `metric` `swebench.verified.resolve_rate`, `metric_version` `verified-2024-08` (fixed until SWE-bench versions the split), `value` `resolved/100`, `unit` `fraction`, `higher_is_better` true, `task_family` `software_change`, `effort` from `reasoning_effort` (empty when null), `harness` the SWE-bench `agent` string, `provider` empty, `observed_at` from `date`, `source` `swebench:<folder>`. Rows whose `System: Attempts - N` tag is not 1 are not imported as measurements at all (the router matches on metric and version and cannot see attempts); they remain in the recorded fixture and are listed in the diff as skipped. |
 | Refresh cadence | Irregular; weekly refresh is enough. |
-| License | Leaderboard JSON is public; per-submission artifacts are not imported. Store folder IDs, not logs or trajectories. |
+| License | The SWE-bench website data repository is CC BY-NC 4.0. Preserve attribution and non-commercial terms; per-submission artifacts are not imported. Store folder IDs, not logs or trajectories. |
 | Failure | Same partial semantics as models.dev; previous SWE-bench measurements are retained with their original `observed_at`. |
 
 Only the Verified board is imported in slice 1a. Lite, Test, Multimodal, and Multilingual are recorded in the fixture but not normalized until a rule needs them.
@@ -213,7 +213,7 @@ Acceptance cases from the controlling plan, each an offline test:
 ## Work sequence
 
 1. **Thread 1: identity only.** `tools/catalog-build` with the models.dev connector, overlay, validate, diff, atomic publish, and `--from-fixtures`. Output: a catalog with the operator's 13 models and zero benchmark measurements. Evidence: `frost route` against the produced catalog behaves exactly as against `config/catalog.example.json`; fixture-based tests; `make check` green.
-2. **Thread 2: first measured rule.** SWE-bench connector, METRICS.md, the two provisional rules in the example config (commented out), and a recorded live run. Evidence: a software-change task routed with `basis: measured` under the enabled rule on a local config; the acceptance cases above.
+2. **Thread 2: first measured rule.** SWE-bench connector, METRICS.md, the two enabled provisional rules in the example config, and a recorded live run. The fixture proves the measured-rule path, but the September live board has no applicable rows for the current configured models, so ordinary current routes still fall through to operator priors.
 3. **Thread 3: optional enrichment.** AA connector with `--restricted-out`, latency suggestions file, config-check warning. Evidence: synthetic AA fixture test; live run only after Marcus supplies a key and tier.
 4. Update `docs/plans/README.md`, the Fractal model (`catalog-build` moves from proposed to current), and this plan's status to implemented.
 
@@ -227,7 +227,7 @@ Acceptance cases from the controlling plan, each an offline test:
 
 ## Implementation status
 
-Delivered September 16, 2026 (td-b850c7): `tools/catalog-build` with the models.dev, SWE-bench Verified, and Artificial Analysis connectors, `overlay.json` mapping every example model, operator overrides (`catalog.overrides.json`), atomic publish with `catalog.previous.json`, `latency.suggestions.json`, recorded fixtures under `testdata/2026-09-16/`, a golden end-to-end test, and the two enabled provisional rules in `config/frost.example.toml`. Live findings from the first refresh:
+Delivered September 16, 2026 (`td-452c07`; plan `td-b850c7`): `tools/catalog-build` with the models.dev, SWE-bench Verified, and Artificial Analysis connectors, `overlay.json` mapping every example model, operator overrides (`catalog.overrides.json`), atomic publish with `catalog.previous.json`, `latency.suggestions.json`, recorded fixtures under `testdata/2026-09-16/`, a golden end-to-end test, and the two enabled provisional rules in `config/frost.example.toml`. Live findings from the first refresh:
 
 - models.dev maps every operator model except Haiku 4.6 (only Haiku 4.5 is listed) and Jev; both take their facts from overlay defaults. Gemini 3.8 maps to `google/gemini-3.8-flash`, the only 3.8 record, pending confirmation that Antigravity runs that model. DeepSeek 4.1 Flash has no first-party price on models.dev (only resellers list it), so it carries no price measurement.
 - SWE-bench Verified's newest rows date from February 2026 and carry none of the operator's current models, so the two rules fall through to the operator prior for every profile today. models.dev records do carry vendor-reported SWE-Bench Pro, Terminal-Bench, and DeepSWE scores for the current models; importing those is a possible follow-up outside this slice.
@@ -237,5 +237,5 @@ Delivered September 16, 2026 (td-b850c7): `tools/catalog-build` with the models.
 ## Changelog
 
 - 2026-09-16: Approved with decisions recorded; implementation started.
-- 2026-09-16: All three threads delivered; first live refresh published to `~/.config/frost/catalog.json` and `catalog.local.json`. Remaining from the sequence: the `config check` latency warning (belongs with `internal/config`) and the Fractal model update.
+- 2026-09-16: All three producer threads delivered; first live refresh published to `~/.config/frost/catalog.json` and `catalog.local.json`.
 - 2026-09-16: Drafted after slice 1 landed; source facts re-verified against live models.dev and SWE-bench payloads on this date.

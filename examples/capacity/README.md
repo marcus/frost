@@ -1,6 +1,6 @@
 # External capacity snapshots
 
-Frost reads one neutral usage snapshot and never runs a producer. This directory is an example producer for [CodexBar](https://github.com/steipete/CodexBar) 0.60.2 that writes the snapshot Frost's `capacity_file` points at. Any script, usage tool, or hand-edited file that emits the same shape works too; the contract is in the [slice 2 plan](../../docs/plans/active/slice-2-capacity.md).
+Frost reads one neutral usage snapshot and never runs a producer. This directory is an example producer for [CodexBar](https://github.com/steipete/CodexBar) 0.60.2 that writes the snapshot Frost's `capacity_file` points at. Any script, usage tool, or hand-edited file that emits the same shape works too; the contract is in the [slice 2 plan](../../docs/plans/implemented/slice-2-capacity.md).
 
 ## Files
 

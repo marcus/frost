@@ -270,7 +270,6 @@ func runRoute(env Env, args []string) int {
 	if err != nil {
 		return fail(env, f.jsonOut, ExitUsage, err)
 	}
-	warnProblems(env.Stderr, l.problems)
 
 	if f.replay != "" {
 		if f.file != "" || f.stdin || f.requestPath != "" || f.fs.NArg() > 0 || f.record != "" {
@@ -480,7 +479,6 @@ func runProfiles(env Env, args []string) int {
 	if err != nil {
 		return fail(env, *jsonOut, ExitUsage, err)
 	}
-	warnProblems(env.Stderr, l.problems)
 	if *jsonOut {
 		return writeJSON(env, map[string]any{"schema_version": router.SchemaVersion, "profiles": l.cfg.Profiles})
 	}
@@ -660,13 +658,6 @@ func writeJSON(env Env, v any) int {
 	return ExitOK
 }
 
-func warnProblems(w io.Writer, problems []config.Problem) {
-	for _, p := range problems {
-		if p.Severity != "error" {
-			outln(w, "config warning: "+p.Message)
-		}
-	}
-}
 
 func readLimited(path string, limit int) ([]byte, error) {
 	f, err := os.Open(filepath.Clean(path))

@@ -313,7 +313,7 @@ func Load(path string) (*Config, error) {
 		cfg.Pools = append(cfg.Pools, toPool(p))
 	}
 	for _, g := range f.Gateways {
-		cfg.Gateways = append(cfg.Gateways, Gateway{ID: g.ID, BaseURL: g.BaseURL})
+		cfg.Gateways = append(cfg.Gateways, Gateway(g))
 	}
 	if cfg.CapacityFile != "" {
 		cfg.CapacityFiles = append(cfg.CapacityFiles, cfg.CapacityFile)

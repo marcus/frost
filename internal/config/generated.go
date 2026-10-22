@@ -98,7 +98,7 @@ func (c *Config) mergeGenerated(path string) {
 	for _, i := range acceptable("gateway", f.Gateways, func(g fileGateway) string { return g.ID }, func(id string) bool {
 		return slices.ContainsFunc(c.Gateways, func(g Gateway) bool { return g.ID == id })
 	}, add) {
-		c.Gateways = append(c.Gateways, Gateway{ID: f.Gateways[i].ID, BaseURL: f.Gateways[i].BaseURL})
+		c.Gateways = append(c.Gateways, Gateway(f.Gateways[i]))
 		c.generatedGateway[f.Gateways[i].ID] = true
 		g.Gateways++
 	}

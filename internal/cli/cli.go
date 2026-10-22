@@ -150,7 +150,7 @@ Usage:
   frost route --replay records.jsonl [--json]
   frost profiles list [--json]
   frost config check [--json] [--verify-model]
-  frost capacity check [PATH] [--json]
+  frost capacity check [PATH...] [--json]
   frost explain decision.json
   frost version
 
@@ -159,6 +159,7 @@ Route flags:
   --json                 one JSON result on stdout; diagnostics on stderr
   --policy MODE          adequate | quality | fast | relaxed
   --allow IDS            comma-separated profile IDs to consider
+  --surface SURFACES     comma-separated access surfaces to consider (gateway: only aliases a gateway can execute)
   --exclude IDS          comma-separated profile IDs to reject
   --effort E             low | medium | high | xhigh (hard requirement)
   --task-family F        override the analyzer's task family
@@ -166,7 +167,7 @@ Route flags:
   --require-cap CAPS     comma-separated required capabilities
   --latency-ms N         response-time target; with --latency-mode prefer|require
   --latency-milestone M  first_useful_response | complete_response
-  --capacity PATH        usage snapshot (else capacity_file from config); parse errors exit 2
+  --capacity PATH        usage snapshot, repeatable (else capacity_file/capacity_files from config); parse errors exit 2
   --availability MODE    exclude | demote | ignore exhausted included usage (default from config)
   --record PATH          append the task text, answers, and decision to a JSONL file
   --replay PATH          recompute decisions from recorded answers; no provider call
@@ -185,7 +186,7 @@ type loaded struct {
 	problems []config.Problem
 	capacity *router.Capacity
 	capHash  string
-	capNote  string // why capacity is absent, for stderr
+	capNotes []string // why capacity is absent or partial, for stderr
 }
 
 func load(env Env, explicit string) (*loaded, error) {
@@ -230,44 +231,68 @@ func (l *loaded) inputs(env Env) router.Inputs {
 		CatalogHash:    l.catHash,
 		PolicyHash:     l.cfg.Hash,
 		CapacityHash:   l.capHash,
+
+		GeneratedProfilesHash: l.generatedHash(),
 	}
 }
 
-// loadCapacity attaches a snapshot: an explicit path must parse and fit the
-// declared pools; a configured default that is missing is only a note.
-func (l *loaded) loadCapacity(env Env, explicit string) error {
-	path := explicit
-	if path == "" {
-		path = l.cfg.CapacityFile
+func (l *loaded) generatedHash() string {
+	if l.cfg.Generated == nil {
+		return ""
 	}
-	if path == "" {
+	return l.cfg.Generated.Hash
+}
+
+// loadCapacity attaches the usage snapshot. Explicit paths must each parse
+// and fit the declared pools. Configured producers are independent: one that
+// is missing or invalid costs only its own pools, which become unknown, and
+// leaves a note. The producers that load are merged in list order.
+func (l *loaded) loadCapacity(env Env, explicit []string) error {
+	paths := explicit
+	if len(paths) == 0 {
+		paths = l.cfg.CapacityFiles
+	}
+	if len(paths) == 0 {
 		return nil
 	}
-	now := env.Now()
-	cap, hash, err := capacity.Load(path, now)
-	if err != nil {
-		if explicit == "" && errors.Is(err, os.ErrNotExist) {
-			l.capNote = "capacity_file " + path + " does not exist; capacity not considered"
-			return nil
-		}
-		return err
-	}
-	problems := capacity.Validate(cap, l.cfg.Pools, now)
-	if capacity.HasErrors(problems) {
-		var msgs []string
-		for _, p := range problems {
-			if p.Severity == capacity.SeverityError {
-				msgs = append(msgs, p.Message)
+	sources := capacity.LoadSources(paths, l.cfg.Pools, env.Now())
+	if len(explicit) > 0 {
+		for _, s := range sources {
+			if s.Err != nil {
+				return s.Err
 			}
 		}
-		err := fmt.Errorf("snapshot %s: %s", path, strings.Join(msgs, "; "))
-		if explicit == "" {
-			l.capNote = err.Error() + "; capacity not considered"
-			return nil
-		}
-		return err
 	}
-	l.capacity, l.capHash = &cap, hash
+	single := len(paths) == 1
+	for _, s := range sources {
+		switch {
+		case s.Err == nil:
+		case single && s.Missing:
+			l.capNotes = append(l.capNotes, "capacity_file "+s.Path+" does not exist; capacity not considered")
+		case single:
+			l.capNotes = append(l.capNotes, s.Err.Error()+"; capacity not considered")
+		case s.Missing:
+			l.capNotes = append(l.capNotes, "capacity producer "+s.Path+" does not exist; its pools are unknown")
+		default:
+			l.capNotes = append(l.capNotes, s.Err.Error()+"; its pools are unknown")
+		}
+	}
+	merged, hash, problems := capacity.Merge(sources)
+	for _, p := range problems {
+		l.capNotes = append(l.capNotes, p.Message)
+	}
+	if hash != "" {
+		l.capacity, l.capHash = &merged, hash
+	}
+	return nil
+}
+
+// multiFlag collects a repeatable string flag.
+type multiFlag []string
+
+func (m *multiFlag) String() string { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error {
+	*m = append(*m, v)
 	return nil
 }
 
@@ -284,7 +309,8 @@ type routeFlags struct {
 	configPath, file, requestPath, record, replay    string
 	stdin, jsonOut                                   bool
 	policy, allow, exclude, effort, family, contract string
-	caps, capacityPath, availability                 string
+	caps, availability, surface                      string
+	capacityPaths                                    multiFlag
 	latencyMS                                        int
 	latencyMode, latencyMilestone                    string
 }
@@ -309,7 +335,8 @@ func newRouteFlags(stderr io.Writer) *routeFlags {
 	f.fs.StringVar(&f.latencyMilestone, "latency-milestone", "", "")
 	f.fs.StringVar(&f.record, "record", "", "")
 	f.fs.StringVar(&f.replay, "replay", "", "")
-	f.fs.StringVar(&f.capacityPath, "capacity", "", "")
+	f.fs.Var(&f.capacityPaths, "capacity", "")
+	f.fs.StringVar(&f.surface, "surface", "", "")
 	f.fs.StringVar(&f.availability, "availability", "", "")
 	return f
 }
@@ -323,11 +350,16 @@ func runRoute(env Env, args []string) int {
 	if err != nil {
 		return fail(env, f.jsonOut, ExitUsage, err)
 	}
-	if err := l.loadCapacity(env, f.capacityPath); err != nil {
+	if err := l.loadCapacity(env, f.capacityPaths); err != nil {
 		return fail(env, f.jsonOut, ExitUsage, err)
 	}
-	if l.capNote != "" {
-		outln(env.Stderr, "frost: "+l.capNote)
+	for _, note := range l.capNotes {
+		outln(env.Stderr, "frost: "+note)
+	}
+	for _, p := range l.problems {
+		if p.Source == config.SourceGenerated && p.Severity == config.SeverityWarning {
+			outln(env.Stderr, "frost: "+p.Message)
+		}
 	}
 
 	if f.replay != "" {
@@ -411,6 +443,9 @@ func runReplay(env Env, f *routeFlags, l *loaded) int {
 		}
 		if f.availability != "" {
 			task.Constraints.Availability = f.availability
+		}
+		if f.surface != "" {
+			task.Constraints.AccessSurfaces = splitList(f.surface)
 		}
 		d := router.Recommend(task, rec.Assessment, l.inputs(env))
 		if n > 0 && !f.jsonOut {
@@ -507,6 +542,9 @@ func resolveTask(env Env, f *routeFlags) (router.Task, error) {
 	if f.exclude != "" {
 		c.ExcludedProfiles = splitList(f.exclude)
 	}
+	if f.surface != "" {
+		c.AccessSurfaces = splitList(f.surface)
+	}
 	if f.effort != "" {
 		c.Effort = f.effort
 	}
@@ -569,6 +607,12 @@ func runProfiles(env Env, args []string) int {
 			label = m.Label
 		}
 		line := fmt.Sprintf("%-32s %-28s %-14s %s", p.ID, label, p.AccessSurface, state)
+		if p.Alias != "" {
+			line += "  alias " + p.Alias
+		}
+		if p.Source != "" {
+			line += "  " + p.Source
+		}
 		if p.Prior != nil {
 			line += fmt.Sprintf("  prior q%d c%d", p.Prior.QualityRank, p.Prior.CostRank)
 		}
@@ -643,6 +687,13 @@ func runConfig(env Env, args []string) int {
 			out["questions"] = l.cfg.Analyzer.QuestionsFile
 			out["questions_version"] = l.spec.Version
 			out["policy"] = l.cfg.Policy
+			out["capacity_files"] = l.cfg.CapacityFiles
+			if g := l.cfg.Generated; g != nil {
+				out["generated_profiles"] = map[string]any{
+					"path": g.Path, "hash": g.Hash, "producer": g.Producer, "generated_at": g.GeneratedAt,
+					"missing": g.Missing, "profiles": countSource(l.cfg.Profiles), "pools": g.Pools, "gateways": g.Gateways,
+				}
+			}
 		}
 		code := writeJSON(env, out)
 		if !ok {
@@ -657,7 +708,14 @@ func runConfig(env Env, args []string) int {
 		outf(env.Stdout, "analyzer  %s %s\n", l.cfg.Analyzer.Provider, l.cfg.Analyzer.Model)
 		outf(env.Stdout, "policy    %s mode, quantile %.2f\n", l.cfg.Policy.Mode, l.cfg.Policy.UncertainReasoningQuantile)
 		cp := l.cfg.Policy.Capacity
-		outf(env.Stdout, "capacity  file %s; enforce %v, estimated %v, horizon %gh, reserve %g%%, max age %gm\n", orDash(l.cfg.CapacityFile), cp.EnforceAvailability, cp.AllowEstimatedMeasurements, cp.ExpiryHorizonHours, cp.ReservePercent, cp.MaxSnapshotAgeMinutes)
+		files := "file " + orDash(strings.Join(l.cfg.CapacityFiles, ", "))
+		if len(l.cfg.CapacityFiles) > 1 {
+			files = "files " + strings.Join(l.cfg.CapacityFiles, ", ")
+		}
+		outf(env.Stdout, "capacity  %s; enforce %v, estimated %v, horizon %gh, reserve %g%%, max age %gm\n", files, cp.EnforceAvailability, cp.AllowEstimatedMeasurements, cp.ExpiryHorizonHours, cp.ReservePercent, cp.MaxSnapshotAgeMinutes)
+		if g := l.cfg.Generated; g != nil {
+			outf(env.Stdout, "generated %s\n", describeGenerated(g, l.cfg))
+		}
 		outf(env.Stdout, "latency   %s\n", latencyStatus)
 		outf(env.Stdout, "model     %s\n", modelStatus)
 	}
@@ -696,58 +754,105 @@ func verifyModel(env Env, l *loaded) string {
 	return fmt.Sprintf("warning: pinned model %s is not listed by the models endpoint, which enumerates %s; the evaluation endpoint accepts pinned versions it does not list, so this is not proof the pin is retired", l.cfg.Analyzer.Model, strings.Join(models, ", "))
 }
 
+// producerReport is one snapshot file's standing in a capacity check.
+type producerReport struct {
+	Path        string             `json:"path"`
+	Status      string             `json:"status"` // ok | missing | invalid
+	Error       string             `json:"error,omitempty"`
+	Hash        string             `json:"hash,omitempty"`
+	Producer    string             `json:"producer,omitempty"`
+	GeneratedAt *time.Time         `json:"generated_at,omitempty"`
+	Pools       []string           `json:"pools"`
+	Problems    []capacity.Problem `json:"problems"`
+}
+
 func runCapacity(env Env, args []string) int {
 	if len(args) == 0 || args[0] != "check" {
-		outln(env.Stderr, "usage: frost capacity check [PATH] [--json] [--config PATH]")
+		outln(env.Stderr, "usage: frost capacity check [PATH...] [--json] [--config PATH]")
 		return ExitUsage
 	}
 	fs := flag.NewFlagSet("capacity check", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
 	jsonOut := fs.Bool("json", false, "")
 	configPath := fs.String("config", "", "")
-	// Accept the snapshot path before or after the flags.
+	// Accept snapshot paths before or after the flags.
 	if err := fs.Parse(args[1:]); err != nil {
 		return ExitUsage
 	}
-	path := ""
-	if fs.NArg() > 0 {
-		path = fs.Arg(0)
+	var paths []string
+	for fs.NArg() > 0 {
+		paths = append(paths, fs.Arg(0))
 		if err := fs.Parse(fs.Args()[1:]); err != nil {
 			return ExitUsage
-		}
-		if fs.NArg() > 0 {
-			return fail(env, *jsonOut, ExitUsage, errors.New("capacity check takes at most one snapshot path"))
 		}
 	}
 	l, err := load(env, *configPath)
 	if err != nil {
 		return fail(env, *jsonOut, ExitUsage, err)
 	}
-	if path == "" {
-		path = l.cfg.CapacityFile
+	if len(paths) == 0 {
+		paths = l.cfg.CapacityFiles
 	}
-	if path == "" {
-		return fail(env, *jsonOut, ExitUsage, errors.New("no snapshot: pass a path or set capacity_file in the config"))
+	if len(paths) == 0 {
+		return fail(env, *jsonOut, ExitUsage, errors.New("no snapshot: pass a path or set capacity_file or capacity_files in the config"))
 	}
 	now := env.Now()
-	cap, hash, err := capacity.Load(path, now)
-	if err != nil {
-		return fail(env, *jsonOut, ExitUsage, err)
+	sources := capacity.LoadSources(paths, l.cfg.Pools, now)
+	multi := len(paths) > 1
+	if !multi && sources[0].Err != nil && len(sources[0].Problems) == 0 {
+		// One unreadable or unparseable file: a plain input error.
+		return fail(env, *jsonOut, ExitUsage, sources[0].Err)
 	}
-	problems := capacity.Validate(cap, l.cfg.Pools, now)
-	ok := !capacity.HasErrors(problems)
+	merged, hash, mergeProblems := capacity.Merge(sources)
+
+	var problems []capacity.Problem
+	reports := make([]producerReport, 0, len(sources))
+	ok := true
+	for _, s := range sources {
+		r := producerReport{Path: s.Path, Status: "ok", Hash: s.Hash, Pools: []string{}, Problems: s.Problems}
+		if r.Problems == nil {
+			r.Problems = []capacity.Problem{}
+		}
+		if s.Err != nil {
+			ok = false
+			r.Status, r.Error = "invalid", s.Err.Error()
+			if s.Missing {
+				r.Status = "missing"
+			}
+			if len(s.Problems) == 0 {
+				problems = append(problems, capacity.Problem{Severity: capacity.SeverityError, Message: s.Err.Error()})
+			}
+		}
+		if s.Hash != "" {
+			t := s.Snapshot.GeneratedAt
+			r.Producer, r.GeneratedAt = s.Snapshot.Producer, &t
+			for _, ps := range s.Snapshot.Pools {
+				r.Pools = append(r.Pools, ps.ID)
+			}
+		}
+		for _, p := range s.Problems {
+			if multi {
+				p.Message = s.Path + ": " + p.Message
+			}
+			problems = append(problems, p)
+		}
+		reports = append(reports, r)
+	}
+	problems = append(problems, mergeProblems...)
+	problems = append(problems, capacity.Absent(merged, l.cfg.Pools)...)
 	var ev router.CapacityEvaluation
-	if ok {
-		ev = router.EvaluatePools(&cap, l.cfg.Pools, l.cfg.Profiles, l.cfg.Policy.Capacity, now)
+	if hash != "" && (ok || multi) {
+		ev = router.EvaluatePools(&merged, l.cfg.Pools, l.cfg.Profiles, l.cfg.Policy.Capacity, now)
 	}
 	if *jsonOut {
 		out := map[string]any{
 			"schema_version": router.SchemaVersion,
 			"ok":             ok,
-			"snapshot":       path,
+			"snapshot":       strings.Join(paths, ","),
 			"snapshot_hash":  hash,
-			"generated_at":   cap.GeneratedAt,
-			"producer":       cap.Producer,
+			"generated_at":   merged.GeneratedAt,
+			"producer":       merged.Producer,
+			"producers":      reports,
 			"problems":       problems,
 			"pools":          ev.Pools,
 			"profiles":       ev.Profiles,
@@ -760,11 +865,22 @@ func runCapacity(env Env, args []string) int {
 		}
 		return code
 	}
-	outf(env.Stdout, "snapshot  %s (%s, generated %s)\n", path, cap.Producer, cap.GeneratedAt.UTC().Format(time.RFC3339))
+	for _, r := range reports {
+		if !multi {
+			outf(env.Stdout, "snapshot  %s (%s, generated %s)\n", r.Path, r.Producer, r.GeneratedAt.UTC().Format(time.RFC3339))
+			continue
+		}
+		switch r.Status {
+		case "ok":
+			outf(env.Stdout, "producer  %s (%s, generated %s): %d pools\n", r.Path, r.Producer, r.GeneratedAt.UTC().Format(time.RFC3339), len(r.Pools))
+		default:
+			outf(env.Stdout, "producer  %s: %s; its pools are unknown\n", r.Path, r.Status)
+		}
+	}
 	for _, p := range problems {
 		outf(env.Stdout, "%s: %s\n", p.Severity, p.Message)
 	}
-	if !ok {
+	if !ok && !multi {
 		return ExitUsage
 	}
 	for _, pe := range ev.Pools {
@@ -790,8 +906,36 @@ func runCapacity(env Env, args []string) int {
 	for _, w := range ev.Warnings {
 		outln(env.Stdout, "warning: "+w)
 	}
+	if !ok {
+		return ExitUsage
+	}
 	outln(env.Stdout, "ok")
 	return ExitOK
+}
+
+// countSource counts generated profiles that survived validation.
+func countSource(ps []router.Profile) int {
+	n := 0
+	for _, p := range ps {
+		if p.Source == router.SourceGenerated {
+			n++
+		}
+	}
+	return n
+}
+
+func describeGenerated(g *config.Generated, cfg *config.Config) string {
+	switch {
+	case g.Missing:
+		return g.Path + " (not found; optional)"
+	case g.Hash == "":
+		return g.Path + " (ignored; see warnings)"
+	}
+	producer := g.Producer
+	if producer == "" {
+		producer = "unnamed producer"
+	}
+	return fmt.Sprintf("%s (%s, %d profiles in use of %d offered)", g.Path, producer, countSource(cfg.Profiles), g.Profiles)
 }
 
 func orDash(s string) string {

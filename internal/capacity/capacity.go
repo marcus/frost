@@ -193,8 +193,18 @@ func Parse(raw []byte, now time.Time) (router.Capacity, error) {
 }
 
 // Validate checks a parsed snapshot against the declared pools. Errors are
-// observations the topology does not admit; warnings are gaps.
+// observations the topology does not admit; warnings are gaps. It is the
+// single-producer view: a configured pool the snapshot does not mention is a
+// warning. With several producers use ValidateTopology per file and Absent on
+// the merged result instead.
 func Validate(cap router.Capacity, pools []router.Pool, now time.Time) []Problem {
+	return append(ValidateTopology(cap, pools, now), Absent(cap, pools)...)
+}
+
+// ValidateTopology checks one snapshot's pools and windows against the
+// declared topology without complaining about pools it does not report, since
+// another producer may own them.
+func ValidateTopology(cap router.Capacity, pools []router.Pool, now time.Time) []Problem {
 	var ps []Problem
 	errf := func(format string, args ...any) {
 		ps = append(ps, Problem{SeverityError, fmt.Sprintf(format, args...)})
@@ -206,14 +216,12 @@ func Validate(cap router.Capacity, pools []router.Pool, now time.Time) []Problem
 	for _, p := range pools {
 		declared[p.ID] = p
 	}
-	present := map[string]bool{}
 	for _, s := range cap.Pools {
 		pool, ok := declared[s.ID]
 		if !ok {
 			errf("pool %q is not declared in the operator config; a snapshot cannot add pools", s.ID)
 			continue
 		}
-		present[s.ID] = true
 		allowed := append(append([]string{}, pool.RequiredWindowIDs...), pool.ExpiryPreferenceWindowIDs...)
 		have := map[string]router.WindowState{}
 		for _, w := range s.Windows {
@@ -238,11 +246,6 @@ func Validate(cap router.Capacity, pools []router.Pool, now time.Time) []Problem
 					warnf("pool %s: required window %q is absent; the pool is unknown", s.ID, id)
 				}
 			}
-		}
-	}
-	for _, p := range pools {
-		if !present[p.ID] {
-			warnf("configured pool %s is absent from the snapshot; it is unknown", p.ID)
 		}
 	}
 	return ps

@@ -260,7 +260,11 @@ func evaluatePool(cap *Capacity, pool Pool, states map[string]PoolState, pol Cap
 	if pe.Availability != Available || pool.MarginalCost != MarginalIncluded || !pol.PreferExpiringIncludedUsage {
 		return pe
 	}
-	horizon := now.Add(time.Duration(pol.ExpiryHorizonHours * float64(time.Hour)))
+	hours := pol.ExpiryHorizonHours
+	if pool.ExpiryHorizonHours > 0 {
+		hours = pool.ExpiryHorizonHours
+	}
+	horizon := now.Add(time.Duration(hours * float64(time.Hour)))
 	for _, wid := range pool.ExpiryPreferenceWindowIDs {
 		w, ok := windows[wid]
 		if !ok || w.RemainingPercent == nil || *w.RemainingPercent < pol.ReservePercent || w.ResetsAt == nil {

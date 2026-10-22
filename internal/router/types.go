@@ -119,6 +119,9 @@ type Constraints struct {
 	Effort               string         `json:"effort,omitempty"`
 	Latency              *LatencyTarget `json:"latency,omitempty"`
 	Availability         string         `json:"availability,omitempty"` // exclude | demote | ignore; overrides policy.capacity.enforce_availability
+	// AccessSurfaces restricts candidates to profiles on these surfaces. A
+	// caller that can only execute gateway aliases passes ["gateway"].
+	AccessSurfaces []string `json:"access_surfaces,omitempty"`
 }
 
 // LatencyTarget is an explicit response-time constraint.
@@ -215,6 +218,38 @@ type Profile struct {
 	LatencyClass    string   `json:"latency_class,omitempty"` // prior
 	PoolIDs         []string `json:"pool_ids,omitempty"`
 	Prior           *Prior   `json:"prior,omitempty"`
+	// Alias and Gateway name the OpenAI-compatible model alias and the gateway
+	// that serves it. They are set only on profiles whose AccessSurface is
+	// SurfaceGateway.
+	Alias   string      `json:"alias,omitempty"`
+	Gateway *GatewayRef `json:"gateway,omitempty"`
+	// Source records where the profile was declared: empty for the operator's
+	// own config, SourceGenerated for a producer-written profiles file.
+	Source string `json:"source,omitempty"`
+}
+
+// SurfaceGateway is the access surface of a profile executed by calling an
+// OpenAI-compatible gateway (for example a LiteLLM proxy) with an alias.
+const SurfaceGateway = "gateway"
+
+// SourceGenerated marks a profile loaded from a producer-written file.
+const SourceGenerated = "generated"
+
+// GatewayRef identifies the gateway a profile's alias is served by. ID is the
+// name of a configured gateway entry; BaseURL is its resolved address. A
+// profile may carry only a BaseURL.
+type GatewayRef struct {
+	ID      string `json:"id,omitempty"`
+	BaseURL string `json:"base_url"`
+}
+
+// GatewayTarget is what a caller needs to execute a gateway recommendation:
+// send the request to BaseURL with its model set to Alias. This is the stable
+// field LiteLLM pre-call hooks read at recommendation.gateway.
+type GatewayTarget struct {
+	ID      string `json:"id,omitempty"`
+	BaseURL string `json:"base_url"`
+	Alias   string `json:"alias"`
 }
 
 // Prior is an operator's labeled, ordinal impression. Lower QualityRank is
@@ -326,6 +361,10 @@ type Pool struct {
 	RequiredWindowIDs         []string `json:"required_window_ids"`
 	ExpiryPreferenceWindowIDs []string `json:"expiry_preference_window_ids,omitempty"`
 	NonRolloverWindowIDs      []string `json:"non_rollover_window_ids,omitempty"`
+	// ExpiryHorizonHours overrides policy.capacity.expiry_horizon_hours for
+	// this pool when positive. A monthly credit wants a longer lead than a
+	// weekly allowance.
+	ExpiryHorizonHours float64 `json:"expiry_horizon_hours,omitempty"`
 }
 
 // Snapshot enums.
@@ -342,6 +381,7 @@ const (
 	PoolKindSubscription = "subscription"
 	PoolKindMetered      = "metered"
 	PoolKindPrepaid      = "prepaid"
+	PoolKindLocal        = "local" // owned hardware: online, memory headroom, queue slots
 	MarginalIncluded     = "included"
 	MarginalMetered      = "metered"
 )
@@ -380,22 +420,24 @@ type Decision struct {
 
 // Selection is a selected or alternative profile with its applicable effort.
 type Selection struct {
-	Role                string     `json:"role"` // recommended | cheaper | stronger | faster | conditional
-	ProfileID           string     `json:"profile_id"`
-	ModelLabel          string     `json:"model_label"`
-	AccessSurface       string     `json:"access_surface"`
-	OutputContract      string     `json:"output_contract"`
-	GenerationMechanism string     `json:"generation_mechanism,omitempty"`
-	EffortIntent        string     `json:"effort_intent,omitempty"`
-	NativeEffort        *string    `json:"native_effort"`
-	MappingVerified     bool       `json:"mapping_verified"`
-	LatencyClass        string     `json:"latency_class,omitempty"`
-	AdequacyBasis       string     `json:"adequacy_basis"`
-	Availability        string     `json:"availability"`       // available | exhausted | unknown | not_considered
-	AvailabilityBasis   string     `json:"availability_basis"` // exact | estimated | unknown | none
-	CapacityObservedAt  *time.Time `json:"capacity_observed_at"`
-	ExpiryPreferred     bool       `json:"expiry_preferred"`
-	Reason              string     `json:"reason,omitempty"`
+	Role          string `json:"role"` // recommended | cheaper | stronger | faster | conditional
+	ProfileID     string `json:"profile_id"`
+	ModelLabel    string `json:"model_label"`
+	AccessSurface string `json:"access_surface"`
+	// Gateway is present only for gateway profiles; see GatewayTarget.
+	Gateway             *GatewayTarget `json:"gateway,omitempty"`
+	OutputContract      string         `json:"output_contract"`
+	GenerationMechanism string         `json:"generation_mechanism,omitempty"`
+	EffortIntent        string         `json:"effort_intent,omitempty"`
+	NativeEffort        *string        `json:"native_effort"`
+	MappingVerified     bool           `json:"mapping_verified"`
+	LatencyClass        string         `json:"latency_class,omitempty"`
+	AdequacyBasis       string         `json:"adequacy_basis"`
+	Availability        string         `json:"availability"`       // available | exhausted | unknown | not_considered
+	AvailabilityBasis   string         `json:"availability_basis"` // exact | estimated | unknown | none
+	CapacityObservedAt  *time.Time     `json:"capacity_observed_at"`
+	ExpiryPreferred     bool           `json:"expiry_preferred"`
+	Reason              string         `json:"reason,omitempty"`
 }
 
 // Exclusion records a candidate that was removed and why.
@@ -432,20 +474,23 @@ type Derived struct {
 
 // Provenance identifies every input that shaped the decision.
 type Provenance struct {
-	GeneratedAt      time.Time  `json:"generated_at"`
-	ProgramVersion   string     `json:"program_version"`
-	CatalogVersion   string     `json:"catalog_version"`
-	CatalogHash      string     `json:"catalog_hash,omitempty"`
-	PolicyHash       string     `json:"policy_hash,omitempty"`
-	QuestionsVersion string     `json:"questions_version"`
-	QuestionsHash    string     `json:"questions_hash"`
-	AnalyzerModel    string     `json:"analyzer_model"`
-	CapacityHash     string     `json:"capacity_hash,omitempty"`
-	CapacityUsed     bool       `json:"capacity_used"`
-	CapacityObserved *time.Time `json:"capacity_observed_at,omitempty"`
-	CapacityAgeMin   *int       `json:"capacity_age_minutes,omitempty"`
-	CapacityBasis    string     `json:"capacity_basis,omitempty"` // exact | estimated | stale | unknown
-	EvidenceBases    []string   `json:"evidence_bases"`
+	GeneratedAt    time.Time `json:"generated_at"`
+	ProgramVersion string    `json:"program_version"`
+	CatalogVersion string    `json:"catalog_version"`
+	CatalogHash    string    `json:"catalog_hash,omitempty"`
+	PolicyHash     string    `json:"policy_hash,omitempty"`
+	// GeneratedProfilesHash is the sha256 of the producer-written profiles
+	// file whose accepted entries joined the candidate set, when one loaded.
+	GeneratedProfilesHash string     `json:"generated_profiles_hash,omitempty"`
+	QuestionsVersion      string     `json:"questions_version"`
+	QuestionsHash         string     `json:"questions_hash"`
+	AnalyzerModel         string     `json:"analyzer_model"`
+	CapacityHash          string     `json:"capacity_hash,omitempty"`
+	CapacityUsed          bool       `json:"capacity_used"`
+	CapacityObserved      *time.Time `json:"capacity_observed_at,omitempty"`
+	CapacityAgeMin        *int       `json:"capacity_age_minutes,omitempty"`
+	CapacityBasis         string     `json:"capacity_basis,omitempty"` // exact | estimated | stale | unknown
+	EvidenceBases         []string   `json:"evidence_bases"`
 }
 
 // Inputs bundles everything Recommend needs besides the task and assessment.
@@ -461,4 +506,6 @@ type Inputs struct {
 	CatalogHash    string
 	PolicyHash     string
 	CapacityHash   string
+	// GeneratedProfilesHash is recorded in provenance; the core never reads it.
+	GeneratedProfilesHash string
 }

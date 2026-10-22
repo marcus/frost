@@ -77,6 +77,9 @@ func RenderHuman(w io.Writer, d router.Decision) {
 
 func headline(s router.Selection) string {
 	parts := []string{s.ModelLabel, s.AccessSurface}
+	if s.Gateway != nil {
+		parts[1] = "gateway alias " + s.Gateway.Alias
+	}
 	switch {
 	case s.NativeEffort != nil && *s.NativeEffort != "":
 		parts = append(parts, *s.NativeEffort+" effort")

@@ -20,17 +20,18 @@ func Recommend(task Task, a Assessment, in Inputs) Decision {
 		Warnings:           []string{},
 		Analysis:           Analysis{Questions: a},
 		Provenance: Provenance{
-			GeneratedAt:      in.Now,
-			ProgramVersion:   in.ProgramVersion,
-			CatalogVersion:   in.Catalog.Version,
-			CatalogHash:      in.CatalogHash,
-			PolicyHash:       in.PolicyHash,
-			QuestionsVersion: a.QuestionsVersion,
-			QuestionsHash:    a.QuestionsHash,
-			AnalyzerModel:    a.ReturnedModel,
-			CapacityHash:     in.CapacityHash,
-			CapacityUsed:     false,
-			EvidenceBases:    []string{},
+			GeneratedAt:           in.Now,
+			ProgramVersion:        in.ProgramVersion,
+			CatalogVersion:        in.Catalog.Version,
+			CatalogHash:           in.CatalogHash,
+			PolicyHash:            in.PolicyHash,
+			GeneratedProfilesHash: in.GeneratedProfilesHash,
+			QuestionsVersion:      a.QuestionsVersion,
+			QuestionsHash:         a.QuestionsHash,
+			AnalyzerModel:         a.ReturnedModel,
+			CapacityHash:          in.CapacityHash,
+			CapacityUsed:          false,
+			EvidenceBases:         []string{},
 		},
 	}
 	pol := in.Policy
@@ -459,6 +460,9 @@ func gate(p Profile, cat Catalog, c Constraints, der *Derived) string {
 	if slices.Contains(c.ExcludedProfiles, p.ID) {
 		return "Explicitly excluded."
 	}
+	if len(c.AccessSurfaces) > 0 && !slices.Contains(c.AccessSurfaces, p.AccessSurface) {
+		return "Access surface " + p.AccessSurface + " is not in the allowed surface list (" + strings.Join(c.AccessSurfaces, ", ") + ")."
+	}
 	m, ok := cat.Models[p.ModelID]
 	if !ok {
 		return "Model " + p.ModelID + " is not in the catalog."
@@ -681,6 +685,7 @@ func selection(cd cand, role string, der *Derived, reason string) Selection {
 		ProfileID:           cd.p.ID,
 		ModelLabel:          labelFor(cd),
 		AccessSurface:       cd.p.AccessSurface,
+		Gateway:             gatewayTarget(cd.p),
 		OutputContract:      der.OutputContract,
 		GenerationMechanism: cd.m.GenerationMechanism,
 		MappingVerified:     cd.p.MappingVerified,
@@ -713,6 +718,15 @@ func selection(cd cand, role string, der *Derived, reason string) Selection {
 		s.NativeEffort = nil
 	}
 	return s
+}
+
+// gatewayTarget is the executable form of a gateway profile, nil for every
+// other surface.
+func gatewayTarget(p Profile) *GatewayTarget {
+	if p.AccessSurface != SurfaceGateway || p.Gateway == nil || p.Alias == "" {
+		return nil
+	}
+	return &GatewayTarget{ID: p.Gateway.ID, BaseURL: p.Gateway.BaseURL, Alias: p.Alias}
 }
 
 func labelFor(cd cand) string {

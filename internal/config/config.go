@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -37,11 +38,42 @@ type Config struct {
 	Path          string
 	CatalogFile   string // absolute
 	CapacityFile  string // absolute; optional default snapshot
+	// CapacityFiles is every configured snapshot producer in precedence
+	// order: capacity_file first, then capacity_files. All are absolute.
+	CapacityFiles []string
 	Analyzer      AnalyzerConfig
 	Policy        router.Policy
 	Profiles      []router.Profile
 	Pools         []Pool
-	Hash          string // sha256 hex of the raw file bytes
+	Gateways      []Gateway
+	// Generated describes the producer-written profiles file, when the config
+	// names one. Its accepted profiles, pools, and gateways are already merged
+	// into the slices above, each profile marked with Source "generated".
+	Generated *Generated
+	Hash      string // sha256 hex of the raw file bytes
+
+	loadProblems     []Problem
+	generatedPools   map[string]bool
+	generatedGateway map[string]bool
+}
+
+// Gateway is a named OpenAI-compatible endpoint, such as a LiteLLM proxy,
+// that serves the aliases gateway profiles name.
+type Gateway struct {
+	ID      string
+	BaseURL string
+}
+
+// Generated reports what the producer-written profiles file contributed.
+type Generated struct {
+	Path        string
+	Hash        string // sha256 hex of the raw bytes; empty when unread
+	Producer    string
+	GeneratedAt string
+	Missing     bool
+	Profiles    int // accepted by structural checks; Validate may still drop some
+	Pools       int
+	Gateways    int
 }
 
 // AnalyzerConfig names the judgment provider and its request settings.
@@ -57,10 +89,12 @@ type AnalyzerConfig struct {
 // Pool is the router's quota-pool declaration; the TOML shape converts to it.
 type Pool = router.Pool
 
-// Problem is one validation finding.
+// Problem is one validation finding. Source is "generated" for findings about
+// the producer-written profiles file and empty for the operator's own config.
 type Problem struct {
-	Severity string // error | warning
+	Severity string // error | warning | info
 	Message  string
+	Source   string `json:",omitempty"`
 }
 
 // LatencySuggestions is the optional producer output written beside a catalog.
@@ -81,7 +115,11 @@ type LatencySuggestion struct {
 const (
 	SeverityError   = "error"
 	SeverityWarning = "warning"
+	SeverityInfo    = "info" // an expected state, such as an operator override
 )
+
+// SourceGenerated marks a Problem about the producer-written profiles file.
+const SourceGenerated = router.SourceGenerated
 
 // HasErrors reports whether any problem is an error.
 func HasErrors(ps []Problem) bool {
@@ -96,13 +134,24 @@ func HasErrors(ps []Problem) bool {
 // File mirrors the TOML layout. Pointers distinguish unset from zero so
 // defaults can fill in without clobbering an explicit value.
 type fileConfig struct {
-	SchemaVersion int           `toml:"schema_version"`
-	CatalogFile   string        `toml:"catalog_file"`
-	CapacityFile  string        `toml:"capacity_file"`
-	Analyzer      fileAnalyzer  `toml:"analyzer"`
-	Policy        filePolicy    `toml:"policy"`
-	Profiles      []fileProfile `toml:"profiles"`
-	Pools         []filePool    `toml:"pools"`
+	SchemaVersion int      `toml:"schema_version"`
+	CatalogFile   string   `toml:"catalog_file"`
+	CapacityFile  string   `toml:"capacity_file"`
+	CapacityFiles []string `toml:"capacity_files"`
+	// GeneratedProfilesFile is a producer-written JSON file of profiles, pools,
+	// and gateways merged beneath the operator's own declarations.
+	GeneratedProfilesFile string        `toml:"generated_profiles_file"`
+	Analyzer              fileAnalyzer  `toml:"analyzer"`
+	Policy                filePolicy    `toml:"policy"`
+	Gateways              []fileGateway `toml:"gateways"`
+	Profiles              []fileProfile `toml:"profiles"`
+	Pools                 []filePool    `toml:"pools"`
+}
+
+// fileGateway is shared by the TOML config and the generated JSON file.
+type fileGateway struct {
+	ID      string `toml:"id" json:"id"`
+	BaseURL string `toml:"base_url" json:"base_url"`
 }
 
 type fileAnalyzer struct {
@@ -151,35 +200,39 @@ type fileAdequacy struct {
 }
 
 type fileProfile struct {
-	ID              string     `toml:"id"`
-	Label           string     `toml:"label"`
-	Model           string     `toml:"model"`
-	AccessSurface   string     `toml:"access_surface"`
-	Enabled         *bool      `toml:"enabled"`
-	OutputContracts []string   `toml:"output_contracts"`
-	Capabilities    []string   `toml:"capabilities"`
-	EffortMode      string     `toml:"effort_mode"`
-	NativeEffort    string     `toml:"native_effort"`
-	EffortOptions   []string   `toml:"effort_options"`
-	MappingVerified bool       `toml:"mapping_verified"`
-	LatencyClass    string     `toml:"latency_class"`
-	PoolIDs         []string   `toml:"pool_ids"`
-	Prior           *filePrior `toml:"prior"`
+	ID              string     `toml:"id" json:"id"`
+	Label           string     `toml:"label" json:"label"`
+	Model           string     `toml:"model" json:"model"`
+	AccessSurface   string     `toml:"access_surface" json:"access_surface"`
+	Enabled         *bool      `toml:"enabled" json:"enabled"`
+	OutputContracts []string   `toml:"output_contracts" json:"output_contracts"`
+	Capabilities    []string   `toml:"capabilities" json:"capabilities"`
+	EffortMode      string     `toml:"effort_mode" json:"effort_mode"`
+	NativeEffort    string     `toml:"native_effort" json:"native_effort"`
+	EffortOptions   []string   `toml:"effort_options" json:"effort_options"`
+	MappingVerified bool       `toml:"mapping_verified" json:"mapping_verified"`
+	LatencyClass    string     `toml:"latency_class" json:"latency_class"`
+	PoolIDs         []string   `toml:"pool_ids" json:"pool_ids"`
+	Prior           *filePrior `toml:"prior" json:"prior"`
+	Alias           string     `toml:"alias" json:"alias"`
+	Gateway         string     `toml:"gateway" json:"gateway"`
+	GatewayURL      string     `toml:"gateway_url" json:"gateway_url"`
 }
 
 type filePrior struct {
-	QualityRank int `toml:"quality_rank"`
-	CostRank    int `toml:"cost_rank"`
+	QualityRank int `toml:"quality_rank" json:"quality_rank"`
+	CostRank    int `toml:"cost_rank" json:"cost_rank"`
 }
 
 type filePool struct {
-	ID                        string   `toml:"id"`
-	Kind                      string   `toml:"kind"`
-	MarginalCost              string   `toml:"marginal_cost"`
-	MappingVerified           bool     `toml:"mapping_verified"`
-	RequiredWindowIDs         []string `toml:"required_window_ids"`
-	ExpiryPreferenceWindowIDs []string `toml:"expiry_preference_window_ids"`
-	NonRolloverWindowIDs      []string `toml:"non_rollover_window_ids"`
+	ID                        string   `toml:"id" json:"id"`
+	Kind                      string   `toml:"kind" json:"kind"`
+	MarginalCost              string   `toml:"marginal_cost" json:"marginal_cost"`
+	MappingVerified           bool     `toml:"mapping_verified" json:"mapping_verified"`
+	RequiredWindowIDs         []string `toml:"required_window_ids" json:"required_window_ids"`
+	ExpiryPreferenceWindowIDs []string `toml:"expiry_preference_window_ids" json:"expiry_preference_window_ids"`
+	NonRolloverWindowIDs      []string `toml:"non_rollover_window_ids" json:"non_rollover_window_ids"`
+	ExpiryHorizonHours        float64  `toml:"expiry_horizon_hours" json:"expiry_horizon_hours"`
 }
 
 // Resolve picks the operator config path: an explicit flag, FROST_CONFIG,
@@ -254,42 +307,67 @@ func Load(path string) (*Config, error) {
 	}
 	cfg.Policy = mergePolicy(f.Policy)
 	for _, p := range f.Profiles {
-		enabled := true
-		if p.Enabled != nil {
-			enabled = *p.Enabled
-		}
-		rp := router.Profile{
-			ID:              p.ID,
-			Label:           p.Label,
-			ModelID:         p.Model,
-			AccessSurface:   p.AccessSurface,
-			Enabled:         enabled,
-			OutputContracts: p.OutputContracts,
-			Capabilities:    p.Capabilities,
-			EffortMode:      p.EffortMode,
-			NativeEffort:    p.NativeEffort,
-			EffortOptions:   p.EffortOptions,
-			MappingVerified: p.MappingVerified,
-			LatencyClass:    p.LatencyClass,
-			PoolIDs:         p.PoolIDs,
-		}
-		if p.Prior != nil {
-			rp.Prior = &router.Prior{QualityRank: p.Prior.QualityRank, CostRank: p.Prior.CostRank}
-		}
-		cfg.Profiles = append(cfg.Profiles, rp)
+		cfg.Profiles = append(cfg.Profiles, toProfile(p))
 	}
 	for _, p := range f.Pools {
-		cfg.Pools = append(cfg.Pools, router.Pool{
-			ID:                        p.ID,
-			Kind:                      or(p.Kind, router.PoolKindSubscription),
-			MarginalCost:              or(p.MarginalCost, router.MarginalIncluded),
-			MappingVerified:           p.MappingVerified,
-			RequiredWindowIDs:         p.RequiredWindowIDs,
-			ExpiryPreferenceWindowIDs: p.ExpiryPreferenceWindowIDs,
-			NonRolloverWindowIDs:      p.NonRolloverWindowIDs,
-		})
+		cfg.Pools = append(cfg.Pools, toPool(p))
+	}
+	for _, g := range f.Gateways {
+		cfg.Gateways = append(cfg.Gateways, Gateway{ID: g.ID, BaseURL: g.BaseURL})
+	}
+	if cfg.CapacityFile != "" {
+		cfg.CapacityFiles = append(cfg.CapacityFiles, cfg.CapacityFile)
+	}
+	for _, p := range f.CapacityFiles {
+		cfg.CapacityFiles = append(cfg.CapacityFiles, resolveRel(dir, p))
+	}
+	if f.GeneratedProfilesFile != "" {
+		cfg.mergeGenerated(resolveRel(dir, f.GeneratedProfilesFile))
 	}
 	return cfg, nil
+}
+
+func toProfile(p fileProfile) router.Profile {
+	enabled := true
+	if p.Enabled != nil {
+		enabled = *p.Enabled
+	}
+	rp := router.Profile{
+		ID:              p.ID,
+		Label:           p.Label,
+		ModelID:         p.Model,
+		AccessSurface:   p.AccessSurface,
+		Enabled:         enabled,
+		OutputContracts: p.OutputContracts,
+		Capabilities:    p.Capabilities,
+		EffortMode:      p.EffortMode,
+		NativeEffort:    p.NativeEffort,
+		EffortOptions:   p.EffortOptions,
+		MappingVerified: p.MappingVerified,
+		LatencyClass:    p.LatencyClass,
+		PoolIDs:         p.PoolIDs,
+		Alias:           p.Alias,
+	}
+	if p.Gateway != "" || p.GatewayURL != "" {
+		rp.Gateway = &router.GatewayRef{ID: p.Gateway, BaseURL: p.GatewayURL}
+	}
+	if p.Prior != nil {
+		rp.Prior = &router.Prior{QualityRank: p.Prior.QualityRank, CostRank: p.Prior.CostRank}
+	}
+	return rp
+}
+
+func toPool(p filePool) router.Pool {
+	return router.Pool{
+		ID:                        p.ID,
+		Kind:                      or(p.Kind, router.PoolKindSubscription),
+		MarginalCost:              or(p.MarginalCost, router.MarginalIncluded),
+		MappingVerified:           p.MappingVerified,
+		RequiredWindowIDs:         p.RequiredWindowIDs,
+		ExpiryPreferenceWindowIDs: p.ExpiryPreferenceWindowIDs,
+		NonRolloverWindowIDs:      p.NonRolloverWindowIDs,
+		ExpiryHorizonHours:        p.ExpiryHorizonHours,
+	}
 }
 
 // LoadLatencySuggestions reads the optional producer output next to the
@@ -448,12 +526,12 @@ func mergePolicy(f filePolicy) router.Policy {
 // outputContractOptions come from the loaded question specification; a nil
 // slice skips that check.
 func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, outputContractOptions []string) []Problem {
-	var ps []Problem
+	ps := slices.Clone(c.loadProblems)
 	errf := func(format string, args ...any) {
-		ps = append(ps, Problem{SeverityError, fmt.Sprintf(format, args...)})
+		ps = append(ps, Problem{Severity: SeverityError, Message: fmt.Sprintf(format, args...)})
 	}
 	warnf := func(format string, args ...any) {
-		ps = append(ps, Problem{SeverityWarning, fmt.Sprintf(format, args...)})
+		ps = append(ps, Problem{Severity: SeverityWarning, Message: fmt.Sprintf(format, args...)})
 	}
 
 	if c.Analyzer.Model == "" {
@@ -551,8 +629,42 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 		errf("policy.capacity.reserve_percent must be in [0, 50], got %g", cp.ReservePercent)
 	}
 
+	seenCapacity := map[string]bool{}
+	for i, path := range c.CapacityFiles {
+		switch {
+		case path == "":
+			errf("capacity_files[%d]: path is empty", i)
+		case seenCapacity[path]:
+			errf("capacity_files[%d]: %s is listed twice", i, path)
+		}
+		seenCapacity[path] = true
+	}
+
+	gateways := map[string]string{}
+	var droppedGateways []string
+	for i, g := range c.Gateways {
+		start := len(ps)
+		where := fmt.Sprintf("gateways[%d] (%s)", i, g.ID)
+		if g.ID == "" {
+			errf("gateways[%d]: id is required", i)
+		} else if _, dup := gateways[g.ID]; dup {
+			errf("%s: duplicate gateway id", where)
+		}
+		if err := checkBaseURL(g.BaseURL); err != nil {
+			errf("%s: base_url %v", where, err)
+		}
+		if quarantine(&ps, start, c.generatedGateway[g.ID], "gateway", g.ID) {
+			droppedGateways = append(droppedGateways, g.ID)
+			continue
+		}
+		gateways[g.ID] = g.BaseURL
+	}
+	c.Gateways = slices.DeleteFunc(c.Gateways, func(g Gateway) bool { return slices.Contains(droppedGateways, g.ID) })
+
 	poolIDs := map[string]bool{}
+	var droppedPools []string
 	for i, p := range c.Pools {
+		start := len(ps)
 		if p.ID == "" {
 			errf("pools[%d]: id is required", i)
 			continue
@@ -562,8 +674,11 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 			errf("%s: duplicate pool id", where)
 		}
 		poolIDs[p.ID] = true
-		if !slices.Contains([]string{router.PoolKindSubscription, router.PoolKindMetered, router.PoolKindPrepaid}, p.Kind) {
-			errf("%s: kind %q must be subscription, metered, or prepaid", where, p.Kind)
+		if !slices.Contains([]string{router.PoolKindSubscription, router.PoolKindMetered, router.PoolKindPrepaid, router.PoolKindLocal}, p.Kind) {
+			errf("%s: kind %q must be subscription, metered, prepaid, or local", where, p.Kind)
+		}
+		if p.ExpiryHorizonHours < 0 {
+			errf("%s: expiry_horizon_hours must not be negative, got %g", where, p.ExpiryHorizonHours)
 		}
 		if p.MarginalCost != router.MarginalIncluded && p.MarginalCost != router.MarginalMetered {
 			errf("%s: marginal_cost %q must be included or metered", where, p.MarginalCost)
@@ -586,13 +701,20 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 		if !p.MappingVerified {
 			warnf("%s: mapping_verified is false; capacity is ignored for profiles bound to it", where)
 		}
+		if quarantine(&ps, start, c.generatedPools[p.ID], "pool", p.ID) {
+			droppedPools = append(droppedPools, p.ID)
+			delete(poolIDs, p.ID)
+		}
 	}
+	c.Pools = slices.DeleteFunc(c.Pools, func(p Pool) bool { return slices.Contains(droppedPools, p.ID) })
 
 	profileIDs := map[string]bool{}
 	enabled := 0
 	var unverified []string
+	var droppedProfiles []string
 	for i := range c.Profiles {
 		p := &c.Profiles[i]
+		start := len(ps)
 		where := fmt.Sprintf("profiles[%d]", i)
 		if p.ID == "" {
 			errf("%s: id is required", where)
@@ -606,9 +728,7 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 		if p.AccessSurface == "" {
 			errf("%s: access_surface is required", where)
 		}
-		if p.Enabled {
-			enabled++
-		}
+		c.checkGatewayProfile(p, where, gateways, errf)
 		var model router.Model
 		haveModel := false
 		if p.ModelID == "" {
@@ -663,14 +783,24 @@ func (c *Config) Validate(cat router.Catalog, taskFamilyOptions []string, output
 			}
 		}
 		if p.Enabled {
-			if !p.MappingVerified {
-				unverified = append(unverified, p.ID)
-			}
 			if p.Prior == nil && !ruleCovers(pol.AdequacyRules, model) {
 				warnf("%s: no operator prior and no measured rule coverage; adequacy will be unknown", where)
 			}
 		}
+		if quarantine(&ps, start, p.Source == router.SourceGenerated, "profile", p.ID) {
+			droppedProfiles = append(droppedProfiles, p.ID)
+			continue
+		}
+		if p.Enabled {
+			enabled++
+			if !p.MappingVerified {
+				unverified = append(unverified, p.ID)
+			}
+		}
 	}
+	c.Profiles = slices.DeleteFunc(c.Profiles, func(p router.Profile) bool {
+		return p.Source == router.SourceGenerated && slices.Contains(droppedProfiles, p.ID)
+	})
 	if len(unverified) > 0 {
 		warnf("%d enabled profiles have unverified native mappings (%s); their results stay provisional and no command is offered", len(unverified), strings.Join(unverified, ", "))
 	}
@@ -705,4 +835,91 @@ func or(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// quarantine handles the findings an entry produced since start. For an
+// operator entry nothing changes. For a generated entry, errors become
+// warnings that say the entry is ignored, and the entry's other findings are
+// discarded since it will never route; clean generated entries keep their
+// warnings, tagged as generated. It reports whether the entry must be dropped.
+func quarantine(ps *[]Problem, start int, generated bool, kind, id string) bool {
+	if !generated {
+		return false
+	}
+	mine := slices.Clone((*ps)[start:])
+	*ps = (*ps)[:start]
+	dropped := slices.ContainsFunc(mine, func(p Problem) bool { return p.Severity == SeverityError })
+	for _, p := range mine {
+		p.Source = SourceGenerated
+		if dropped {
+			if p.Severity != SeverityError {
+				continue
+			}
+			p.Severity = SeverityWarning
+			p.Message = fmt.Sprintf("generated %s %q ignored: %s", kind, id, p.Message)
+		}
+		*ps = append(*ps, p)
+	}
+	return dropped
+}
+
+// checkBaseURL accepts an absolute http or https URL with a host and without
+// credentials, a query, or a fragment. Credentials in a URL would leak into
+// every recommendation that carries it.
+func checkBaseURL(raw string) error {
+	if raw == "" {
+		return errors.New("is required")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%q is not a URL", raw)
+	}
+	switch {
+	case u.Scheme != "http" && u.Scheme != "https":
+		return fmt.Errorf("%q must use http or https", raw)
+	case u.Host == "":
+		return fmt.Errorf("%q has no host", raw)
+	case u.User != nil:
+		return errors.New("must not embed credentials")
+	case u.RawQuery != "" || u.Fragment != "":
+		return fmt.Errorf("%q must not carry a query or fragment", raw)
+	}
+	return nil
+}
+
+// checkGatewayProfile enforces the gateway surface contract: a gateway
+// profile names an alias and exactly one gateway (a configured entry or a
+// direct base URL), and only gateway profiles may carry either. A valid
+// reference is resolved in place so the router sees an executable target.
+func (c *Config) checkGatewayProfile(p *router.Profile, where string, gateways map[string]string, errf func(string, ...any)) {
+	if p.AccessSurface != router.SurfaceGateway {
+		if p.Alias != "" || p.Gateway != nil {
+			errf("%s: alias and gateway apply only to access_surface %q", where, router.SurfaceGateway)
+		}
+		return
+	}
+	switch {
+	case p.Alias == "":
+		errf("%s: a gateway profile requires alias", where)
+	case len(p.Alias) > 128 || strings.IndexFunc(p.Alias, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0:
+		errf("%s: alias %q must be 1-128 characters without whitespace or control characters", where, p.Alias)
+	}
+	g := p.Gateway
+	switch {
+	case g == nil || (g.ID == "" && g.BaseURL == ""):
+		errf("%s: a gateway profile requires gateway (a configured gateway id) or gateway_url", where)
+	case g.ID != "" && g.BaseURL != "":
+		errf("%s: set gateway or gateway_url, not both", where)
+	case g.ID != "":
+		base, ok := gateways[g.ID]
+		if !ok {
+			errf("%s: gateway %q is not declared", where, g.ID)
+			return
+		}
+		g.BaseURL = base
+	default:
+		if err := checkBaseURL(g.BaseURL); err != nil {
+			errf("%s: gateway_url %v", where, err)
+		}
+	}
 }

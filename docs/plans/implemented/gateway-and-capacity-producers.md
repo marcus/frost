@@ -29,7 +29,7 @@ Implementation: `td-e60a38` (gateway access surface) and `td-628ef9` (multiple c
 
 ## Compatibility
 
-`TestLegacyDecisionsGolden` (`internal/cli/testdata/legacy/`) freezes the September 2026 example config, catalog, questions, and a snapshot with one expiry-eligible and one exhausted pool, then compares 86 recorded `frost route --json` decisions (levels 0–4, all four policy modes, capacity absent, present, demoted, ignored, plus allow/exclude/effort/latency cases), the human rendering, and `profiles list --json` byte for byte. It was recorded on the code before this change and must keep passing without regeneration. Every new output field is `omitempty` and absent for old configs; `capacity check --json` gains a `producers` array and `config check --json` gains `capacity_files`.
+`TestLegacyDecisionsGolden` (`internal/cli/testdata/legacy/`) freezes the September 2026 example config, catalog, questions, and a snapshot with one expiry-eligible and one exhausted pool, then compares 84 recorded `frost route --json` decisions (levels 0–4, all four policy modes, capacity absent, present, demoted, ignored, plus allow/exclude/effort/latency cases), the human rendering, and `profiles list --json` byte for byte. It was recorded on the code before this change and must keep passing without regeneration. Every new output field is `omitempty` and absent for old configs; `capacity check --json` gains a `producers` array and `config check --json` gains `capacity_files`.
 
 ## Open points
 

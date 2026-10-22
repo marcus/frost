@@ -84,9 +84,9 @@ model {
     }
 
     config = component 'Operator config' {
-      description 'Parses and validates the TOML operator file: analyzer settings, selection policy and adequacy rules, execution profiles with labeled priors and latency classes, and quota pools. Unknown keys are errors; profile aliases are rewritten to catalog IDs; the file hash becomes policy provenance.'
+      description 'Parses and validates the TOML operator file: analyzer settings, selection policy and adequacy rules, execution profiles with labeled priors and latency classes (including gateway profiles that name an alias and a gateway), quota pools, and gateways. Merges an optional producer-written profiles file beneath the operator declarations and drops invalid generated entries as warnings. Unknown keys are errors; profile aliases are rewritten to catalog IDs; the file hash becomes policy provenance.'
       technology 'Go, go-toml'
-      metadata { uid 'frost.config' fractalColor '#B59669' evidence ['internal/config/config.go', 'config/frost.example.toml', 'config/README.md'] }
+      metadata { uid 'frost.config' fractalColor '#B59669' evidence ['internal/config/config.go', 'internal/config/generated.go', 'config/frost.example.toml', 'config/README.md'] }
     }
 
     catalog = component 'Model catalog reader' {
@@ -122,8 +122,8 @@ model {
     }
 
     capacity = component 'Capacity snapshot' {
-      description 'Parses and validates the neutral usage snapshot, hashes its bytes for provenance, and evaluates freshness separately from producer-specific data. Router policy computes per-pool and per-profile availability and expiry eligibility against operator-owned topology.'
-      metadata { uid 'frost.capacity' fractalColor '#B59669' evidence ['internal/capacity/capacity.go', 'internal/router/capacity.go', 'docs/plans/implemented/slice-2-capacity.md'] }
+      description 'Parses and validates each neutral usage snapshot independently, merges the usable producers in list order, hashes their bytes for provenance, and evaluates freshness per pool separately from producer-specific data. A missing or invalid producer leaves only its own pools unknown. Router policy computes per-pool and per-profile availability and expiry eligibility against operator-owned topology.'
+      metadata { uid 'frost.capacity' fractalColor '#B59669' evidence ['internal/capacity/capacity.go', 'internal/capacity/sources.go', 'internal/router/capacity.go', 'docs/plans/implemented/slice-2-capacity.md', 'docs/plans/implemented/gateway-and-capacity-producers.md'] }
     }
 
     eval = component 'Evaluation' {
@@ -169,11 +169,23 @@ model {
       technology 'JSONL'
       metadata { uid 'files.records' fractalColor '#82A6B6' evidence ['internal/evidence/jsonl/jsonl.go', 'internal/cli/cli.go'] }
     }
+    generated = store 'profiles.generated.json' {
+      description 'Optional producer-written JSON of gateways, pools and profiles, merged beneath the operator config. The operator wins ID collisions; a malformed file or invalid entry is reported as a warning and ignored, never fatal. Its hash is recorded in decision provenance.'
+      technology 'JSON'
+      metadata { uid 'files.generated' fractalColor '#B59669' evidence ['internal/config/generated.go', 'config/generated-profiles.example.json', 'config/README.md'] }
+    }
     capacity = store 'capacity.json' {
-      description 'Optional neutral usage snapshot with per-pool windows, observation time, measurement quality and source status. It cannot add pools or profile bindings; absent means capacity is not considered.'
+      description 'Optional neutral usage snapshots, one file per producer (capacity_file and capacity_files), each with per-pool windows, observation time, measurement quality and source status. Local-fleet and expiring-credit pools use the same shape. A snapshot cannot add pools or profile bindings; absent means that producer\'s pools are unknown.'
       technology 'JSON'
       metadata { uid 'files.capacity' fractalColor '#B59669' evidence ['internal/capacity/capacity.go', 'examples/capacity/README.md'] }
     }
+  }
+
+  rook = external 'rook inventory producer' {
+    #proposed
+    description 'A separate inventory tool for the personal OpenRouter. It will write the generated profiles file from what is installed and a local-fleet capacity snapshot (host online, VRAM headroom, queue depth). Frost defines the contracts it writes to and never runs it.'
+    technology 'Go CLI'
+    metadata { uid 'rook-producer' fractalColor '#B59669' evidence ['docs/plans/implemented/gateway-and-capacity-producers.md', 'examples/capacity/local-fleet.example.json', 'config/generated-profiles.example.json'] }
   }
 
   typesafeApi = external 'TypeSafe API' {
@@ -204,6 +216,7 @@ model {
   frost.cli.loader .calls frost.catalog 'Load the referenced catalog' { metadata { uid 'loader-catalog' } }
   frost.cli.loader .calls frost.analyzer.spec 'LoadSpec and Validate the question IDs' { metadata { uid 'loader-spec' } }
   frost.config .reads files.config 'Parse TOML, hash raw bytes' { metadata { uid 'config-reads-file' } }
+  frost.config .reads files.generated 'Strict JSON decode; operator entries win collisions; invalid entries become warnings' { metadata { uid 'config-reads-generated' } }
   frost.catalog .reads files.catalog 'Parse JSON, hash raw bytes' { metadata { uid 'catalog-reads-file' } }
   frost.analyzer.spec .reads files.questions 'Parse and hash the question set' { metadata { uid 'spec-reads-file' } }
   frost.config .provides frost.router.contract 'Profiles, pools, priors, latency classes, Policy and adequacy/capacity rules' { metadata { uid 'config-provides-inputs' } }
@@ -229,6 +242,8 @@ model {
   catalogBuild .writes files.catalog 'Validate, diff and atomically publish a versioned source-attributed catalog' { metadata { uid 'catalog-build-writes' } }
 
   // Proposed relationships
+  rook .writes files.generated 'Generate gateway profiles, pools and gateways from the inventory' { #proposed metadata { uid 'rook-writes-generated' } }
+  rook .writes files.capacity 'Publish local-fleet pools in the neutral snapshot shape' { #proposed metadata { uid 'rook-writes-capacity' } }
   frost.eval .reads frost.evidence.jsonl 'Replay slice 1 recordings and recorded outcomes' { #proposed metadata { uid 'eval-reads-records' } }
   frost.eval .calls frost.router.recommend.derive 'Compare policies over the same recorded assessments' { #proposed metadata { uid 'eval-recommend' } }
   frost.api .calls frost.router.recommend.derive 'Recommend over HTTP' { #proposed metadata { uid 'api-recommend' } }

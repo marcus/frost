@@ -3,7 +3,7 @@
   "id": "frost",
   "title": "Frost",
   "description": "A model and execution-profile recommender: task analysis in, one deterministic Recommend policy, human or JSON out.",
-  "provenance": "Updated on 2026-09-16 from the Go sources under cmd/, internal/ and tools/catalog-build after slices 1, 1a and 2 were implemented, plus config/ and examples/capacity. Only evaluation and the later API/MCP adapters remain proposed. Current public data still provides no applicable task-family measurements for the configured models, and no paired completion-outcome evaluation exists; the diagram describes implemented boundaries, not recommendation quality. Evidence paths are pointers into this repository, not proof that a claim is still current.",
+  "provenance": "Updated on 2026-09-16 from the Go sources under cmd/, internal/ and tools/catalog-build after slices 1, 1a and 2 were implemented, plus config/ and examples/capacity. Only evaluation and the later API/MCP adapters remain proposed. Current public data still provides no applicable task-family measurements for the configured models, and no paired completion-outcome evaluation exists; the diagram describes implemented boundaries, not recommendation quality. Evidence paths are pointers into this repository, not proof that a claim is still current. Updated on 2026-10-21 for the gateway access surface, the producer-written profiles file, and multiple capacity producers (docs/plans/implemented/gateway-and-capacity-producers.md); rook is shown as a proposed external producer because it is not built.",
   "boundaries": [
     {
       "id": "deterministic-core",

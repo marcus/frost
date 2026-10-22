@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Gateway access surface. A profile with `access_surface = "gateway"` names an OpenAI-compatible `alias` and a `[[gateways]]` entry (or `gateway_url`); `frost route --json` exposes `recommendation.gateway` (`alias`, `base_url`, `id`) so a LiteLLM pre-call hook can rewrite `model: auto`. `--surface` / `constraints.access_surfaces` limits candidates to executable surfaces.
+- Generated profiles. `generated_profiles_file` merges a producer-written JSON file of gateways, pools, and profiles beneath the operator's own; the operator wins ID collisions, and invalid generated entries are dropped with warnings instead of stopping routing. `config check` validates them and decisions record `provenance.generated_profiles_hash`.
+- Multiple capacity producers. `capacity_files` joins `capacity_file`; each snapshot is validated independently and a missing, stale, or failed producer makes only its own pools unknown. `--capacity` is repeatable, `capacity check` reports each producer, and pools gain `kind = "local"` for local-fleet headroom and an optional `expiry_horizon_hours` for expiring credits (with `examples/capacity/credit-snapshot.sh`).
+- Existing configs and snapshots produce byte-identical decisions, pinned by a golden regression test.
+
 ## [0.1.0] - 2026-09-16
 
 - Distribution: MIT license for Frost code, separate source-data notices, contributor guidance, and both `frost` and `catalog-build` in local installs, release archives, and the Homebrew formula. Archives include configuration and producer assets and are smoke-tested before release.

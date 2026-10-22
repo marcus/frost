@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-21T20:00:00Z",
+  "producer": "rook",
+  "pools": [
+    {
+      "id": "host-5090",
+      "source_status": "ok",
+      "measurement": "exact",
+      "observed_at": "2026-10-21T20:00:00Z",
+      "valid_until": "2026-10-21T20:02:00Z",
+      "windows": [
+        {"id": "online", "remaining_percent": 100, "resets_at": null},
+        {"id": "vram_free", "remaining_percent": 38.5, "resets_at": null},
+        {"id": "queue_slots", "remaining_percent": 75, "resets_at": null}
+      ]
+    }
+  ]
+}

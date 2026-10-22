@@ -10,6 +10,14 @@ catalog_file = "catalog.example.json"
 # Optional default usage snapshot written by an external producer (see
 # examples/capacity). A missing file is a note, not an error.
 capacity_file = "capacity.json"
+# More snapshot producers (for example rook's local fleet pools) go here; each
+# file is validated on its own and a failed one makes only its pools unknown.
+# capacity_files = ["rook-capacity.json"]
+# A producer-written JSON file of gateway profiles, pools and gateways that
+# merges beneath the profiles below; yours win on an id collision. See
+# config/generated-profiles.example.json and the "Generated profiles" section of
+# config/README.md.
+# generated_profiles_file = "profiles.generated.json"
 
 [analyzer]
 provider = "typesafe"
@@ -280,6 +288,28 @@ effort_mode = "none"
 mapping_verified = false
 latency_class = "extra_fast"
 
+# A profile reached through an OpenAI-compatible gateway (for example LiteLLM)
+# names the alias to send as `model` and the gateway that serves it. Disabled
+# here as a template; recommendation.gateway in `frost route --json` carries
+# the alias and base_url to the caller.
+#
+# [[gateways]]
+# id = "litellm"
+# base_url = "http://aerie.local:4000/v1"
+#
+# [[profiles]]
+# id = "gw-code"
+# model = "deepseek-4.1-flash"
+# access_surface = "gateway"
+# alias = "code"
+# gateway = "litellm"
+# mapping_verified = true
+# effort_mode = "none"
+# latency_class = "fast"
+# [profiles.prior]
+# quality_rank = 4
+# cost_rank = 12
+
 # Quota pools are declared here and observed by an external snapshot
 # (examples/capacity/refresh.sh). The snapshot cannot add pools or windows.
 # Window IDs follow CodexBar's names; verify a binding with
@@ -335,3 +365,26 @@ mapping_verified = false
 required_window_ids = ["codex-spark", "codex-spark-weekly"]
 expiry_preference_window_ids = ["codex-spark-weekly"]
 non_rollover_window_ids = ["codex-spark", "codex-spark-weekly"]
+
+# A monthly API credit that refreshes each cycle with no rollover is an expiring
+# included-usage pool; bind it to the profile that spends it via pool_ids.
+# expiry_horizon_hours overrides the policy horizon for this pool only.
+#
+# [[pools]]
+# id = "anthropic-credit"
+# kind = "prepaid"
+# marginal_cost = "included"
+# mapping_verified = true
+# required_window_ids = ["monthly"]
+# expiry_preference_window_ids = ["monthly"]
+# non_rollover_window_ids = ["monthly"]
+# expiry_horizon_hours = 168
+#
+# A local machine is a pool whose windows are headroom percentages that never reset.
+#
+# [[pools]]
+# id = "host-5090"
+# kind = "local"
+# marginal_cost = "included"
+# mapping_verified = true
+# required_window_ids = ["online", "vram_free", "queue_slots"]

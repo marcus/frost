@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-21T20:00:00Z",
+  "producer": "rook",
+  "gateways": [
+    {"id": "litellm", "base_url": "http://aerie.local:4000/v1"}
+  ],
+  "pools": [
+    {
+      "id": "host-5090",
+      "kind": "local",
+      "marginal_cost": "included",
+      "mapping_verified": true,
+      "required_window_ids": ["online", "vram_free", "queue_slots"]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "rook-local-code",
+      "label": "Local code model",
+      "model": "deepseek-4.1-flash",
+      "access_surface": "gateway",
+      "alias": "code",
+      "gateway": "litellm",
+      "pool_ids": ["host-5090"],
+      "capabilities": ["repository_tools", "web_research"],
+      "effort_mode": "none",
+      "mapping_verified": true,
+      "latency_class": "fast",
+      "prior": {"quality_rank": 4, "cost_rank": 12}
+    },
+    {
+      "id": "rook-chat",
+      "label": "Chat alias",
+      "model": "haiku-4.6",
+      "access_surface": "gateway",
+      "alias": "chat",
+      "gateway": "litellm",
+      "capabilities": ["web_research"],
+      "effort_mode": "none",
+      "mapping_verified": true,
+      "latency_class": "extra_fast",
+      "prior": {"quality_rank": 9, "cost_rank": 9}
+    }
+  ]
+}

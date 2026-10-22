@@ -1,6 +1,6 @@
 # External capacity snapshots
 
-Frost reads one neutral usage snapshot and never runs a producer. This directory is an example producer for [CodexBar](https://github.com/steipete/CodexBar) 0.60.2 that writes the snapshot Frost's `capacity_file` points at. Any script, usage tool, or hand-edited file that emits the same shape works too; the contract is in the [slice 2 plan](../../docs/plans/implemented/slice-2-capacity.md).
+Frost reads neutral usage snapshots and never runs a producer. This directory is an example producer for [CodexBar](https://github.com/steipete/CodexBar) 0.60.2 that writes the snapshot Frost's `capacity_file` points at. Any script, usage tool, or hand-edited file that emits the same shape works too, and several producers can feed one Frost through `capacity_files`; the contract is in the [slice 2 plan](../../docs/plans/implemented/slice-2-capacity.md) and the multi-producer rules are in the [extension plan](../../docs/plans/implemented/gateway-and-capacity-producers.md).
 
 ## Requirements
 
@@ -19,6 +19,36 @@ examples/capacity/refresh.sh --bindings ~/.config/frost/capacity-bindings.json -
 examples/capacity/install-launchd.sh
 frost capacity check ~/.config/frost/capacity.json
 ```
+
+- `credit-snapshot.sh`: turns a prepaid credit's grant, spend so far, and cycle end into a one-window snapshot for an expiring pool such as a monthly API credit. Needs `jq`.
+- `local-fleet.example.json`: what a local-fleet producer such as rook writes for a host.
+
+## Several producers
+
+Give each producer its own file and list them in the config (`capacity_file` is the first entry; `capacity_files` adds the rest). Frost loads and validates each file independently, so a producer that is down, stale, or wrong costs only the pools it owns. A pool should have one owner; if two files report the same pool the earlier file in the list wins. `valid_until` is how a producer sets its own freshness: codexbar's fifteen minutes suits a weekly allowance, while a local-fleet producer should say a minute or two, because queue depth and VRAM headroom go stale fast. Frost takes the earlier of `valid_until` and the policy's `max_snapshot_age_minutes`. Atomic replace (write a temp file, then rename) is expected of every producer, as in `refresh.sh`.
+
+## Local fleet contract (rook and similar)
+
+A producer that watches owned hardware reports each host or fleet as a pool. Topology stays in the operator config (or the generated profiles file): the pool's `required_window_ids` name the windows below, and the snapshot may report only windows the pool declares.
+
+| Window | `remaining_percent` | Notes |
+| --- | --- | --- |
+| `online` | 100 or 0 | 0 is a positive observation that the host is down and excludes its profiles. Use `source_status: error` (or omit the pool) when the producer could not tell. |
+| `vram_free` | free VRAM as a percentage | Below `reserve_percent` (default 5) counts as exhausted. |
+| `queue_slots` | 100 × (1 − queued ÷ allowed) | 0 means the queue is full. |
+
+Set `measurement` to `exact` for probed values, `observed_at` to the time of the probe, `resets_at` to `null` (local windows do not reset, so they never earn the expiry preference), and a short `valid_until`. `local-fleet.example.json` is a complete example; declare its pool as `kind = "local"` (see [Local fleet pools](../../config/README.md#local-fleet-pools)). A producer may name its windows differently as long as the pool declares them.
+
+## Expiring API credit
+
+A monthly credit that refreshes each cycle with no rollover is an expiring included-usage pool, so `prefer_expiring_included_usage` applies to it once its reset is inside the horizon. Declare it as a `prepaid` pool with `expiry_preference_window_ids` and `non_rollover_window_ids` naming its window and a pool-level `expiry_horizon_hours` (see [Expiring API credit](../../config/README.md#expiring-api-credit)), bind the profile that spends it with `pool_ids`, and publish the snapshot:
+
+```sh
+examples/capacity/credit-snapshot.sh --granted 200 --spent 52.40 --resets-at 2026-11-01T00:00:00Z \
+  --out ~/.config/frost/credit-capacity.json
+```
+
+then add `credit-capacity.json` to `capacity_files`. `--spent` is whatever your billing view or the gateway's spend logs report; Frost only sees the resulting percentage.
 
 ## What the snapshot can and cannot say
 

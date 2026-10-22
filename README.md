@@ -105,7 +105,11 @@ frost capacity check ~/.config/frost/capacity.json
 frost route --availability exclude "Review this migration for correctness."
 ```
 
-Choose `exclude` to skip exhausted pools, `demote` to put them behind peers within the same objective tier, or `ignore` to bypass capacity for a call. Capacity only affects profiles that already meet the quality floor. Missing, stale, failed, or unverified observations remain unknown. Any producer that emits the snapshot format can replace CodexBar; see the [integration guide](examples/capacity/README.md) for requirements and optional scheduled refreshes.
+Choose `exclude` to skip exhausted pools, `demote` to put them behind peers within the same objective tier, or `ignore` to bypass capacity for a call. Capacity only affects profiles that already meet the quality floor. Missing, stale, failed, or unverified observations remain unknown. Any producer that emits the snapshot format can replace CodexBar, and several can run side by side with `capacity_files`; each is validated on its own and a failed one makes only its own pools unknown. See the [integration guide](examples/capacity/README.md) for requirements, the local-fleet contract, expiring API credit pools, and optional scheduled refreshes.
+
+## Route behind a gateway
+
+A profile with `access_surface = "gateway"` names an OpenAI-compatible alias and the gateway that serves it, so a recommendation is something a LiteLLM proxy can execute directly. `frost route --json --surface gateway` limits candidates to those profiles and exposes the answer at `recommendation.gateway` (`alias`, `base_url`, and the gateway `id`), which a pre-call hook can use to rewrite `model: "auto"`. An inventory tool can write such profiles into a separate `generated_profiles_file` that merges beneath yours; yours win on an ID collision, and a bad generated entry is dropped with a warning instead of stopping routing. See the [configuration guide](config/README.md#gateway-profiles).
 
 ## Record and replay
 

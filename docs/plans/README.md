@@ -4,6 +4,7 @@
 - [Catalog and performance evidence](active/catalog-and-profile-evidence.md): supporting contract for public-data refresh, model/output types, latency, context, and optional personal preferences. Read after the controlling plan.
 - [Slice 1a: public catalog producer](implemented/slice-1a-catalog-producer.md): implemented `tools/catalog-build`, source connectors, identity overlay, and provisional measured adequacy rules (td-452c07; planning task td-b850c7).
 - [Slice 2: capacity-aware selection](implemented/slice-2-capacity.md): implemented neutral usage snapshot, availability and expiry preference in the router, and optional CodexBar wrapper (td-3af594; planning task td-d398e8).
+- [Gateway profiles and multiple capacity producers](implemented/gateway-and-capacity-producers.md): implemented gateway access surface, producer-written profiles file, several independent capacity snapshots, local-fleet and expiring API-credit pools (td-e60a38, td-628ef9).
 - [Public-source research](../research/model-data-sources.md): verified sources, access conditions, refresh semantics, and candidate inputs for external producers.
 
 Plans in `planning/` await approval, plans in `active/` still control ongoing work, and completed slices live in `implemented/`. The executable under `experiments/` is the original feasibility probe.
